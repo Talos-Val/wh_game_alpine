@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import time
+import sys
+
+def clicker():
+    zeilen = 0
+    bots = 0
+    bot_preis = 10
+    
+    print("💻 WILLKOMMEN BEIM CLI-DEV-CLICKER 💻")
+    print("Drücke ENTER, um eine Zeile Code zu schreiben.")
+    print("Tippe 'u' + ENTER, um einen Auto-Coder-Bot zu kaufen.")
+    print("Tippe 'exit' zum Beenden.")
+    print("-" * 50)
+    
+    last_time = time.time()
+    
+    try:
+        while True:
+            # Simpler Idle-Mechanismus: Bots generieren Code pro Schleifendurchlauf
+            current_time = time.time()
+            if current_time - last_time >= 1.0:
+                if bots > 0:
+                    zeilen += bots
+                last_time = current_time
+                
+            # Status-Zeile fliegend updaten
+            sys.stdout.write(f"\r💾 Code-Zeilen: {zeilen} | 🤖 Bots: {bots} (Preis für Upgrade: {bot_preis}) -> ")
+            sys.stdout.flush()
+            
+            # Eingabe abfangen
+            wahl = input().strip().lower()
+            
+            if wahl == "exit":
+                print("\nProgramm beendet. Deine Tastatur glüht!")
+                break
+            elif wahl == "u":
+                if zeilen >= bot_preis:
+                    zeilen -= bot_preis
+                    bots += 1
+                    bot_preis = int(bot_preis * 1.5)
+                    print("\n\033[92m🤖 Bot gekauft! Er tippt jetzt fleißig im Hintergrund.\033[0m")
+                else:
+                    print(f"\n\033[31m❌ Zu wenig Code! Du brauchst {bot_preis} Zeilen.\033[0m")
+            else:
+                # Normaler Klick
+                zeilen += 1
+                
+    except KeyboardInterrupt:
+        print("\n\nProjekt abgebrochen. Der Code wurde gespeichert.")
+
+if __name__ == "__main__":
+    clicker()

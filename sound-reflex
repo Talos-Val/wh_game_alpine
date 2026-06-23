@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+import time
+import sys
+import random
+
+def reflex_test():
+    print("🎧 REFLX-TESTER v1.0 🎧")
+    print("Setz die Kopfhörer auf oder mach den Ton an.")
+    print("Sobald der PIEPTON ertönt, drücke SOFORT die ENTER-TASTE!")
+    print("-" * 50)
+    
+    input("\nDrücke Enter, wenn du bereit bist...")
+    print("Konzentriere dich... Stille...")
+    
+    # Zufällige Wartezeit zwischen 2 und 6 Sekunden
+    time.sleep(random.uniform(2.0, 6.0))
+    
+    # Piepton abfeuern und Zeit stoppen
+    sys.stdout.write("\a💥 JETZT!!! ")
+    sys.stdout.flush()
+    start_zeit = time.time()
+    
+    input() # Wartet auf den Enter-Druck des Users
+    end_zeit = time.time()
+    
+    reaktionszeit = (end_zeit - start_zeit) * 1000 # In Millisekunden
+    
+    print(f"\n⏱️  DEINE REAKTIONSZEIT: {reaktionszeit:.2f} Millisekunden")
+    
+    if reaktionszeit < 150:
+        print("⚡ Unmenschlich! Du bist ein verdammter Gott oder ein Chatbot.")
+    elif reaktionszeit < 250:
+        print("🟢 Stark! Perfekte Gamer-Reflexe.")
+    elif reaktionszeit < 400:
+        print("🟡 Solide, aber da geht noch was. Mehr Knabemalz trinken!")
+    else:
+        print("🔴 Eingeschlafen? Das war im Schneckentempo.")
+
+if __name__ == "__main__":
+    reflex_test()

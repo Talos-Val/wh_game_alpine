@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+import random
+import time
+import sys
+import shutil
+
+def race():
+    cols, _ = shutil.get_terminal_size()
+    ziel = min(50, cols - 15)
+    
+    print("🐛 WILLKOMMEN BEIM GROSSEN TERMINAL-WURMRENNEN! 🐛")
+    print("Auf welchen Wurm setzt du deine Kronen?")
+    print("1 - Roter Rambo 🔴\n2 - Grüner Godzilla 🟢\n3 - Blauer Blitz 🔵")
+    
+    tipp = input("> ").strip()
+    print("\n🏁 DIE MOTOREN... ÄH... WÜRMER STARTEN! 🏁\n")
+    time.sleep(1.5)
+    
+    # Startpositionen
+    w1, w2, w3 = 0, 0, 0
+    farben = {"w1": "\033[31m", "w2": "\033[32m", "w3": "\033[34m", "reset": "\033[0m"}
+    
+    try:
+        while w1 < ziel and w2 < ziel and w3 < ziel:
+            # Zufälliger Schritt für jeden Wurm
+            w1 += random.randint(0, 2)
+            w2 += random.randint(0, 2)
+            w3 += random.randint(0, 2)
+            
+            # Zeilen zeichnen (\r springt zurück, wir löschen die alten Zeilen nicht, sondern überschreiben sie fliegend)
+            # Um mehrere Zeilen im Terminal fliegend zu updaten, nutzen wir ANSI-Cursor-Up-Codes (\033[A)
+            sys.stdout.write(f"\r🔴 Wurm 1: {' ' * w1}{farben['w1']}~>>>\033[0m{' ' * (ziel-w1)} 🏁\n")
+            sys.stdout.write(f"\r🟢 Wurm 2: {' ' * w2}{farben['w2']}~>>>\033[0m{' ' * (ziel-w2)} 🏁\n")
+            sys.stdout.write(f"\r🔵 Wurm 3: {' ' * w3}{farben['w3']}~>>>\033[0m{' ' * (ziel-w3)} 🏁")
+            sys.stdout.flush()
+            
+            # Cursor wieder 2 Zeilen nach oben setzen für die nächste Runde
+            sys.stdout.write("\033[A\033[A")
+            time.sleep(0.1)
+            
+        # Den Cursor nach dem Rennen nach unten schieben
+        print("\n\n\n🏆 RENNEN BEENDET!")
+        gewinner = ""
+        if w1 >= ziel: gewinner = "1"
+        elif w2 >= ziel: gewinner = "2"
+        else: gewinner = "3"
+        
+        print(f"Wurm {gewinner} hat das Ziel erreicht!")
+        if tipp == gewinner:
+            print("🎉 Sauber! Du hast richtig getippt und den Jackpot geknackt!")
+        else:
+            print("❌ Dein Wurm war heute wohl etwas träge. Mehr Glück beim nächsten Mal!")
+            
+    except KeyboardInterrupt:
+        print("\n\nAbgebrochen. Die Würmer sind erschöpft im Schlamm stecken geblieben.")
+
+if __name__ == "__main__":
+    race()

@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+import time
+import sys
+import random
+
+TASKS = [
+    "Defragmentiere das virtuelle WLAN-Kabel...",
+    "Infiltriere das Schul-Intranet via SSH-Tunnel...",
+    "Lade mehr RAM aus dem Internet herunter...",
+    "Säubere den Prozessor von digitalem Staub...",
+    "Kompiliere hunderte Zeilen fehlerhaften Ork-Code...",
+    "Überbrücke die Firewall mit einer Büroklammer...",
+    "Sende anonyme Pings an die NASA..."
+]
+
+def fake_loading():
+    task = random.choice(TASKS)
+    print(f"\n⚙️ {task}")
+    
+    balken_breite = 30
+    
+    for prozent in range(101):
+        # Berechnen, wie viele Blöcke gefüllt sein müssen
+        gefuellt = int(round(balken_breite * prozent / 100.0))
+        balken = "█" * gefuellt + "░" * (balken_breite - gefuellt)
+        
+        # Ausgabe in derselben Zeile aktualisieren
+        sys.stdout.write(f"\r[{balken}] {prozent}%")
+        sys.stdout.flush()
+        
+        # Zufällige Verzögerung für realistisches 'Stocken' des Balkens
+        if prozent in [23, 56, 82, 94]:
+            time.sleep(random.uniform(0.6, 1.5))
+        else:
+            time.sleep(random.uniform(0.02, 0.1))
+            
+    print("\n\n✅ VORGANG ERFOLGREICH ABGESCHLOSSEN!")
+    print("[SYSTEM]: Keine Spuren hinterlassen.\n")
+
+if __name__ == "__main__":
+    fake_loading()

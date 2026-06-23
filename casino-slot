@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+import random
+import time
+import sys
+
+EMOJIS = ["🍒", "🍋", "💎", "🍇", "🔔", "💀"]
+
+def spin_slots():
+    print("🎰 WILLKOMMEN IM BASH-CASINO! 🎰")
+    print("Der Automat rollt... Drücke Strg+C zum Abbrechen.\n")
+    
+    try:
+        # Die rotierende Animation (20 Schritte)
+        for i in range(20):
+            w1 = random.choice(EMOJIS)
+            w2 = random.choice(EMOJIS)
+            w3 = random.choice(EMOJIS)
+            
+            # \r sorgt dafür, dass die Zeile immer wieder überschrieben wird
+            sys.stdout.write(f"\r   [ {w1} | {w2} | {w3} ]   ")
+            sys.stdout.flush()
+            time.sleep(0.1)
+            
+        # Das finale Ergebnis auswerten
+        print("\n")
+        if w1 == w2 == w3:
+            if w1 == "💎":
+                print("💎💎💎 ABSOLUTER JACKPOT! Du hast das Terminal gesprengt! 💎💎💎")
+            elif w1 == "💀":
+                print("💀 JEMAND HAT DEN TOD GEZOGEN... Du verlierst alle deine Daten! (Nur Spaß)")
+            else:
+                print("🎉 DREIFACH! Du hast gewonnen! 🎉")
+        elif w1 == w2 or w2 == w3 or w1 == w3:
+            print("✨ Knapp! Ein Doppelpack. Gibt immerhin Trostpunkte! ✨")
+        else:
+            print("❌ Niete! Schmeiß noch eine virtuelle Münze ein. ❌")
+            
+    except KeyboardInterrupt:
+        print("\nSpiel abgebrochen. Die Bank gewinnt immer!")
+
+if __name__ == "__main__":
+    spin_slots()

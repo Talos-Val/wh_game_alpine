@@ -1,60 +1,68 @@
 #!/usr/bin/env python3
-import random
+import time
 import os
 
-STATUS_FILE = "/tmp/squig_status.txt"
+STATUS_FILE = "/tmp/squig_data.txt"
+WEG_FILE = "/tmp/squig_weg.txt" # Hier speichern wir, ob er weg ist
 
 def lade_squig():
     if os.path.exists(STATUS_FILE):
         with open(STATUS_FILE, "r") as f:
-            daten = f.read().split(",")
-            return int(daten[0]), int(daten[1])
-    return 50, 50 # Hunger, Laune
+            d = f.read().split(",")
+            return int(d[0]), int(d[1]), int(d[2]), float(d[3])
+    return 50, 50, 0, time.time()
 
-def speichere_squig(hunger, laune):
+def speichere_squig(h, l, t):
     with open(STATUS_FILE, "w") as f:
-        f.write(f"{hunger},{laune}")
+        f.write(f"{h},{l},{t},{time.time()}")
 
 def squig_pet():
-    hunger, laune = lade_squig()
+    # Prüfen, ob er weg ist
+    if os.path.exists(WEG_FILE):
+        print("😭 Dein Squig ist weggelaufen... Du hast ihn zu lange vernachlässigt!")
+        if input("Willst du ihn mit 50 Teef Suchen/Locken? (j/n): ") == "j":
+            os.remove(WEG_FILE)
+            speichere_squig(50, 50, 0)
+            print("Er ist wieder da! 🎉")
+            return
+        return
+
+    hunger, laune, teef, last_time = lade_squig()
     
-    # Zustand verschlechtern bei jedem Start
-    hunger = min(100, hunger + random.randint(5, 15))
-    laune = max(0, laune - random.randint(5, 15))
+    # Zeitberechnung
+    jetzt = time.time()
+    diff = jetzt - last_time
     
-    print("🔴 DEIN TERMINAL-SQUIG 🔴")
-    if hunger > 80:
-        print("    (oO)  *KNURR*")
-        print("   <(__)>  Der Squig ist ausgehungert und fletscht die Zähne!")
-    elif laune < 30:
-        print("    (--)  *SCHMOLL*")
-        print("   <(__)>  Der Squig schaut dich böse an.")
-    else:
-        print("    (==)  *SABBER*")
-        print("   <(__)>  Der Squig hüpft fröhlich im Terminal herum.")
+    # 1. Weglauf-Check (1 Woche = 604800 Sekunden)
+    if diff > 604800:
+        with open(WEG_FILE, "w") as f: f.write("weg")
+        print("Dein Squig hat das Weite gesucht! 🏃‍♂️")
+        return
+
+    # 2. Passive Teef-Generierung
+    teef += int(diff / 10) * (1 if laune > 50 else 0)
+    hunger = min(100, hunger + int(diff / 60))
+    laune = max(0, laune - int(diff / 120))
+    
+    while True:
+        print(f"\n--- SQUIG-STATUS ---")
+        print(f"💰 Teef: {teef} | ❤️ Hunger: {hunger}% | 😊 Laune: {laune}%")
+        print("1 - Füttern | 2 - Spielen | 3 - Waffen kaufen | 4 - Speichern & Beenden")
         
-    print(f"\n📊 Status -> Hunger: {hunger}% | Laune: {laune}%")
-    print("Was willst du tun?\n1 - Füttern (Fleischbrocken reinwerfen)\n2 - Streicheln (Vorsichtig wegen den Zähnen)\n3 - Treten (Nicht empfohlen)")
-    
-    wahl = input("> ").strip()
-    if wahl == "1":
-        hunger = max(0, hunger - 40)
-        laune = min(100, laune + 10)
-        print("\n🥩 Mampf! Er verschlingt das Fleisch und kaut kurz auf deinem Stiefel.")
-    elif wahl == "2":
-        if random.random() > 0.3:
-            laune = min(100, laune + 30)
-            print("\n❤️ Er genießt es und schnurrt wie ein kaputter Rasenmäher.")
-        else:
-            laune = max(0, laune - 20)
-            print("\n💥 AUTSCH! Er hat versucht, deine Hand abzubeißen!")
-    elif wahl == "3":
-        laune = max(0, laune - 40)
-        hunger = min(100, hunger + 10)
-        print("\n😡 Der Squig schnappt wild nach dir und kackt demonstrativ ins Terminal!")
-        
-    speichere_squig(hunger, laune)
-    print("\nZustand gespeichert. Schau später wieder nach ihm!\n")
+        wahl = input("> ")
+        if wahl == "1":
+            f = input("Was? [M]ensch, [O]rk, [G]rot: ").lower()
+            if f == 'm': hunger -= 50; teef -= 5
+            hunger = max(0, hunger)
+        elif wahl == "2":
+            a = input("Was? [S]töckchen, [J]agen: ").lower()
+            if a == 's': laune += 20
+        elif wahl == "3":
+            if teef >= 100: teef -= 100; print("Du hast eine AK47 gekauft!")
+            else: print("Zu wenig Teef!")
+        elif wahl == "4":
+            speichere_squig(hunger, laune, teef)
+            break
 
 if __name__ == "__main__":
     squig_pet()

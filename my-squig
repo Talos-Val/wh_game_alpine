@@ -2,48 +2,61 @@
 import time
 import os
 
-STATUS_FILE = "/tmp/squig_data.txt"
-WEG_FILE = "/tmp/squig_weg.txt" # Hier speichern wir, ob er weg ist
+# --- KONFIGURATION DER SPEICHERORTE ---
+# Wir speichern alles in einem versteckten Ordner in deinem Home-Verzeichnis
+DATA_DIR = os.path.join(os.path.expanduser("~"), ".squig_data")
+STATUS_FILE = os.path.join(DATA_DIR, "squig_data.txt")
+WEG_FILE = os.path.join(DATA_DIR, "squig_weg.txt")
+
+# Stelle sicher, dass der Ordner existiert
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
 def lade_squig():
     if os.path.exists(STATUS_FILE):
         with open(STATUS_FILE, "r") as f:
             d = f.read().split(",")
             return int(d[0]), int(d[1]), int(d[2]), float(d[3])
+    # Standardwerte, falls keine Datei existiert
     return 50, 50, 0, time.time()
 
 def speichere_squig(h, l, t):
     with open(STATUS_FILE, "w") as f:
+        # hunger, laune, teef, zeitstempel
         f.write(f"{h},{l},{t},{time.time()}")
 
 def squig_pet():
-    # Prüfen, ob er weg ist
+    # 1. PRÜFUNG: Ist er weggelaufen?
     if os.path.exists(WEG_FILE):
         print("😭 Dein Squig ist weggelaufen... Du hast ihn zu lange vernachlässigt!")
-        if input("Willst du ihn mit 50 Teef Suchen/Locken? (j/n): ") == "j":
+        wahl = input("Willst du ihn mit 50 Teef suchen? (j/n): ").lower()
+        if wahl == "j":
+            # Hier könntest du noch eine Teef-Prüfung einbauen
             os.remove(WEG_FILE)
             speichere_squig(50, 50, 0)
-            print("Er ist wieder da! 🎉")
+            print("Du hast ihn gefunden! Er ist wieder da. 🎉")
             return
-        return
+        else:
+            return
 
+    # 2. LADE DATEN
     hunger, laune, teef, last_time = lade_squig()
-    
-    # Zeitberechnung
     jetzt = time.time()
     diff = jetzt - last_time
-    
-    # 1. Weglauf-Check (1 Woche = 604800 Sekunden)
+
+    # 3. WEGLAUF-CHECK (1 Woche = 604800 Sekunden)
     if diff > 604800:
         with open(WEG_FILE, "w") as f: f.write("weg")
         print("Dein Squig hat das Weite gesucht! 🏃‍♂️")
         return
 
-    # 2. Passive Teef-Generierung
-    teef += int(diff / 10) * (1 if laune > 50 else 0)
+    # 4. PASSIVE BERECHNUNGEN
+    # Hunger steigt, Laune sinkt, Teef wächst passiv
     hunger = min(100, hunger + int(diff / 60))
     laune = max(0, laune - int(diff / 120))
-    
+    teef += int(diff / 10) * (1 if laune > 50 else 0)
+
+    # 5. HAUPTMENÜ
     while True:
         print(f"\n--- SQUIG-STATUS ---")
         print(f"💰 Teef: {teef} | ❤️ Hunger: {hunger}% | 😊 Laune: {laune}%")
@@ -53,15 +66,23 @@ def squig_pet():
         if wahl == "1":
             f = input("Was? [M]ensch, [O]rk, [G]rot: ").lower()
             if f == 'm': hunger -= 50; teef -= 5
+            elif f == 'o': hunger -= 30
+            elif f == 'g': hunger -= 10
             hunger = max(0, hunger)
         elif wahl == "2":
             a = input("Was? [S]töckchen, [J]agen: ").lower()
             if a == 's': laune += 20
+            elif a == 'j': laune += 40
         elif wahl == "3":
-            if teef >= 100: teef -= 100; print("Du hast eine AK47 gekauft!")
+            print(f"Verfügbar: {teef} Teef")
+            print("[A]K47: 100 Teef | [M]esser: 40 Teef")
+            kauf = input("> ").lower()
+            if kauf == "a" and teef >= 100: teef -= 100; print("🔫 Bewaffnet!")
+            elif kauf == "m" and teef >= 40: teef -= 40; print("🔪 Bewaffnet!")
             else: print("Zu wenig Teef!")
         elif wahl == "4":
             speichere_squig(hunger, laune, teef)
+            print("Daten gespeichert. Bis bald!")
             break
 
 if __name__ == "__main__":

@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+import random
+
+PROPHEZEIUNGEN = [
+    "Ein Bug, den du vor drei Monaten geschrieben hast, wartet heute im Code auf dich.",
+    "Die Sterne stehen heute extrem gut – allerdings nicht für dich.",
+    "Dein nächster Commit wird einen Merge-Konflikt des Grauens auslösen.",
+    "Heute ist ein großartiger Tag, um im Bett zu bleiben und Sockets zu ignorieren.",
+    "Du wirst heute eine wichtige Datei löschen. Tu es einfach nicht.",
+    "Dein iPad-Akku wird genau dann leer sein, wenn du den wichtigsten Bug fixen willst.",
+    "Jemand hat heimlich die Syntax deiner Lieblingssprache geändert. Viel Spaß beim Suchen.",
+    "Ein Grot hat dein WLAN-Kabel gefressen. Erwarte heute keine stabile Verbindung."
+]
+
+def zeige_schicksal():
+    spruch = random.choice(PROPHEZEIUNGEN)
+    border = "+" + "-" * (len(spruch) + 2) + "+"
+    
+    print("\n🔮 DER HORROR-WAHRSAGER 🔮")
+    print(border)
+    print(f"| {spruch} |")
+    print(border)
+    print("\nGehe mit diesem Wissen weise um...\n")
+
+if __name__ == "__main__":
+    zeige_schicksal()

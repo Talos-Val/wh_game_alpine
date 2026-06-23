@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+import time
+import sys
+
+MORSE_DICT = {
+    'A': '.-', 'B': '-...', 'C': '-.-.', 'D': '-..', 'E': '.', 'F': '..-.', 
+    'G': '--.', 'H': '....', 'I': '..', 'J': '.---', 'K': '-.-', 'L': '.-..', 
+    'M': '--', 'N': '-.', 'O': '---', 'P': '.--.', 'Q': '--.-', 'R': '.-.', 
+    'S': '...', 'T': '-', 'U': '..-', 'V': '...-', 'W': '.--', 'X': '-..-', 
+    'Y': '-.--', 'Z': '--..', '1': '.----', '2': '..---', '3': '...--', 
+    '4': '....-', '5': '.....', '6': '-....', '7': '--...', '8': '---..', 
+    '9': '----.', '0': '-----', ' ': '/'
+}
+
+def morse_sound():
+    print("📻 CLI MORSE-FUNKSTATION 📻")
+    text = input("Gib eine Nachricht ein: ").strip().upper()
+    
+    print("\n📡 Sende Signal...")
+    for buchstabe in text:
+        if buchstabe in MORSE_DICT:
+            code = MORSE_DICT[buchstabe]
+            sys.stdout.write(f" {buchstabe}: {code} ")
+            sys.stdout.flush()
+            
+            for zeichen in code:
+                if zeichen == '.':
+                    # Kurzer Ton via Terminal-Bell
+                    sys.stdout.write("\a")
+                    sys.stdout.flush()
+                    time.sleep(0.1)
+                elif zeichen == '-':
+                    # Langer Ton (wir simulieren die Länge über die Pause)
+                    sys.stdout.write("\a")
+                    sys.stdout.flush()
+                    time.sleep(0.3)
+                elif zeichen == '/':
+                    time.sleep(0.4)
+                time.sleep(0.1) # Pause zwischen Zeichen
+        print("") # Neue Zeile für nächsten Buchstaben
+    print("\n✅ Übertragung beendet.\n")
+
+if __name__ == "__main__":
+    morse_sound()

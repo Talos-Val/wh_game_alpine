@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import random
+
+ZITATE = [
+    "Ein Moment der Laxheit gebiert ein Leben voller Reue!",
+    "Der Wille allein formt die Realität. Lass deinen nicht brechen!",
+    "Schmerz ist eine Illusion der Sinne. Pflicht steht über allem!",
+    "Wer heute schwitzt, blutet morgen weniger auf dem Schlachtfeld!",
+    "Zögern ist der erste Schritt zur Niederlage. Handle jetzt!",
+    "Deine Tastatur ist deine Waffe, dein Code dein Schild. Lass nichts durch!",
+    "Selbst der kleinste Fehler kann ein ganzes System zu Fall bringen. Sei wachsam!"
+]
+
+def zeige_zitat():
+    spruch = random.choice(ZITATE).upper()
+    breite = len(spruch) + 4
+    
+    print("\n\033[95m🛡️  BUNKERE DICH EIN – MOTIVATIONS-LOGBUCH 🛡️\033[0m")
+    print("=" * breite)
+    print(f"I  {spruch}  I")
+    print("=" * breite)
+    print("\n\033[93m[KAMPFGEIST REAKTIVIERT]\033[0m\n")
+
+if __name__ == "__main__":
+    zeige_zitat()

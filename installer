@@ -8,8 +8,7 @@ GITHUB_USER = "Talos-Val"
 REPO_NAME = "linux_tools"
 # -----------------------
 
-# Die Namen in der Liste sind gleichzeitig die Dateinamen auf GitHub
-# UND der Befehl, den du im Terminal zum Starten eintippst.
+# Die Liste aller Tools und ihre Beschreibungen
 TOOLS = {
     "binary-life": "Simulation: Nullen und Einsen kämpfen um die Shell.",
     "bork-filter": "Muppet-Chefkoch-Übersetzer.",
@@ -37,10 +36,16 @@ def zeige_uebersicht():
     for befehl, info in TOOLS.items():
         print(f"  \033[92m{befehl:<20}\033[0m -> {info}")
     print("="*60)
-    print("Tippe einfach den grünen Namen ein, um das Tool zu starten!\n")
+    print("Tippe den grünen Namen ein, um das Tool zu starten.")
+    print("Nutze 'installer --install', um alle Tools zu aktualisieren.\n")
 
 def installiere_tools():
     print(f"🌐 Lade Tools von github.com/{GITHUB_USER}/{REPO_NAME}...")
+    
+    # Sicherstellen, dass das Verzeichnis existiert
+    if not os.path.exists(INSTALL_DIR):
+        os.makedirs(INSTALL_DIR)
+        
     for tool in TOOLS.keys():
         url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/{tool}"
         ziel_pfad = os.path.join(INSTALL_DIR, tool)
@@ -49,11 +54,13 @@ def installiere_tools():
             urllib.request.urlretrieve(url, ziel_pfad)
             os.chmod(ziel_pfad, 0o755)
             print(f"✅ {tool} bereit.")
-        except Exception:
-            print(f"❌ Fehler bei {tool}")
+        except Exception as e:
+            print(f"❌ Fehler bei {tool}: {e}")
+            
     print("\n🔄 Alle Tools wurden aktualisiert und sind unter ihrem Namen startbereit.")
 
 if __name__ == "__main__":
+    # Wenn '--install' als Argument kommt, installiere. Sonst zeige nur die Liste.
     if len(sys.argv) > 1 and sys.argv[1] == "--install":
         installiere_tools()
     else:

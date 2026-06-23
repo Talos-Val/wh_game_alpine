@@ -5,82 +5,185 @@ import sys
 import time
 import random
 
-# Globale Variablen für die Netzwerkverbindung
+# Globale Variablen für das Netzwerk
 conn = None
 mein_zug = False
 spiel_aktiv = True
 bot_modus = False
 
-# Charakter-Auswahl
-fraktionen = {
-    "1": {"name": "Goff Ork Garboss", "lp": 8, "type": "orks"},
-    "2": {"name": "Rubric Sorcerer", "lp": 6, "type": "ts"},
-    "3": {"name": "Night Lords Raptor", "lp": 7, "type": "nl"}
+# Definition der Subklassen und ihrer Fähigkeiten
+SUBKLASSEN = {
+    "1": {
+        "name": "Goff Boss (Orks)", "max_lp": 15, "lp": 15, "fraktion": "orks",
+        "passiv": "Brutale Spalta: Macht extra Schaden bei kritischen Treffern.",
+        "skills": {
+            "1": {"name": "Spalta-Hieb", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Ein solider, dreckiger Schlag."},
+            "2": {"name": "Koppnuss", "typ": "wuchtig", "schaden": 4, "effekt": None, "desc": "Hoher Schaden, trifft aber schwerer."},
+            "3": {"name": "WAAAGH!-Brüllen", "typ": "spezial", "schaden": 1, "effekt": "niedergehalten", "desc": "Verunsichert den Feind (Statuseffekt)."}
+        }
+    },
+    "2": {
+        "name": "Bad Moons Mek (Orks)", "max_lp": 12, "lp": 12, "fraktion": "orks",
+        "passiv": "Bazzooka-Schild: Hat eine etwas bessere Rüstung.",
+        "skills": {
+            "1": {"name": "Knarre schießen", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Eine Salve ungezielter Schüsse."},
+            "2": {"name": "Aufgemotzte Mega-Basta", "typ": "wuchtig", "schaden": 5, "effekt": None, "desc": "Massiver Schaden, neigt zu Fehlschüssen."},
+            "3": {"name": "Brenna-Flamme", "typ": "spezial", "schaden": 1, "effekt": "brennend", "desc": "Zündet das Ziel an (Schaden über Zeit)."}
+        }
+    },
+    "3": {
+        "name": "Rubric Hexer (Thousand Sons)", "max_lp": 10, "lp": 10, "fraktion": "ts",
+        "passiv": "Warp-Schild: Ignoriert den ersten Statuseffekt des Matches.",
+        "skills": {
+            "1": {"name": "Psi-Schlag", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Ein gezielter Strahl aus reiner Warp-Energie."},
+            "2": {"name": "Tzeentch-Feuersturm", "typ": "wuchtig", "schaden": 4, "effekt": None, "desc": "Sprengt die Moleküle des Ziels."},
+            "3": {"name": "Verderbliche Mutation", "typ": "spezial", "schaden": 1, "effekt": "brennend", "desc": "Das Fleisch des Feindes brennt psionisch."}
+        }
+    },
+    "4": {
+        "name": "Scarabaein-Terminator (Thousand Sons)", "max_lp": 14, "lp": 14, "fraktion": "ts",
+        "passiv": "All is Dust: Sehr zäh, verringert erlittenen Schaden leicht.",
+        "skills": {
+            "1": {"name": "Ketten-Schwerttritt", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Rhythmische, unaufhaltsame Hiebe."},
+            "2": {"name": "Kombi-Bolter-Salve", "typ": "wuchtig", "schaden": 3, "effekt": None, "desc": "Konstanter Rüstungsdurchschlag."},
+            "3": {"name": "Inferno-Rakete", "typ": "spezial", "schaden": 2, "effekt": "niedergehalten", "desc": "Explosion erzwingt Deckung."}
+        }
+    },
+    "5": {
+        "name": "Nostramanischer Raptor (Night Lords)", "max_lp": 11, "lp": 11, "fraktion": "nl",
+        "passiv": "In Midnight Clad: Schwerer zu treffen, wenn er volle LP hat.",
+        "skills": {
+            "1": {"name": "Kettenklingen-Schlitz", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Schneller, blutiger Angriff."},
+            "2": {"name": "Sturzflug-Angriff", "typ": "wuchtig", "schaden": 4, "effekt": None, "desc": "Kracht mit dem Sprungmodul voraus in den Feind."},
+            "3": {"name": "Grausame Klingen", "typ": "spezial", "schaden": 1, "effekt": "blutend", "desc": "Verursacht eine klaffende Wunde (Schaden über Zeit)."}
+        }
+    },
+    "6": {
+        "name": "Executioner (Night Lords)", "max_lp": 12, "lp": 12, "fraktion": "nl",
+        "passiv": "Schrecken: Der Bot verliert bei Niederhaltung doppelt so viel Fokus.",
+        "skills": {
+            "1": {"name": "Henkersbeil", "typ": "normal", "schaden": 2, "effekt": None, "desc": "Ein schwerer, zielgerichteter Hieb."},
+            "2": {"name": "Todesurteil", "typ": "wuchtig", "schaden": 5, "effekt": None, "desc": "Ein langsamer, brutaler Enthauptungsversuch."},
+            "3": {"name": "Terror-Schrei", "typ": "spezial", "schaden": 1, "effekt": "niedergehalten", "desc": "Psychotischer Schrei über die Vox-Verstärker."}
+        }
+    }
 }
 
-print("\n💀 WARHAMMER CLI ARENA 💀\n")
-print("Wähle deine Fraktion:")
-for k, v in fraktionen.items():
-    print(f"{k} - {v['name']}")
-wahl = input("Deine Wahl (1-3): ").strip()
-if wahl not in fraktionen: wahl = "1"
+mein_char = {}
+gegner_char = {}
+aktive_effekte_gegner = [] # Effekte auf dem Gegner
+aktive_effekte_spieler = [] # Effekte auf dir selbst
 
-mein_char = fraktionen[wahl]
-gegner_char = {"name": "Unbekannt", "lp": 0, "type": "unknown"}
-
-def wuerfele_schaden(angreifer_type, verteidiger_type):
-    # Night Lords Erschwernis
-    ziel_wert = 4 if verteidiger_type == "nl" else 3
+def verarbeite_statuseffekte(char, effekte, ist_spieler):
+    schaden_seite = "Du leidest" if ist_spieler else f"{char['name']} leidet"
+    neue_effekte = []
+    runden_schaden = 0
     
+    for eff in effekte:
+        if eff == "brennend":
+            runden_schaden += 1
+            print(f"🔥 {schaden_seite} unter 'Brennend'! (-1 LP durch Flammen)")
+            neue_effekte.append(eff) # Hält permanent bis Spielende
+        elif eff == "blutend":
+            runden_schaden += 2
+            print(f"🩸 {schaden_seite} unter 'Blutend'! (-2 LP durch Blutverlust)")
+            # 50% Chance, dass die Wunde schließt
+            if random.random() > 0.5:
+                neue_effekte.append(eff)
+            else:
+                print("🩹 Die Blutung hat aufgehört.")
+        elif eff == "niedergehalten":
+            print(f"😨 {schaden_seite} unter 'Niedergehalten'! (Nächster Angriff geschwächt)")
+            # Hält nur eine Runde, wird also nicht wieder angehängt
+            
+    char["lp"] -= runden_schaden
+    return neue_effekte
+
+def generiere_narrative(angreifer, verteidiger, skill, gewuerfelt, schaden, effekt):
+    name_a = angreifer["name"]
+    name_v = verteidiger["name"]
+    s_name = skill["name"]
+    
+    if schaden == 0:
+        return f"🛡️ {name_a} setzt {s_name} ein, aber {name_v} fängt den Schlag geschickt ab oder weicht aus!"
+
+    text = f"⚔️ {name_a} nutzt **{s_name}**! "
+    
+    # Zustandsskalierung
+    ratio_a = angreifer["lp"] / angreifer["max_lp"]
+    if ratio_a < 0.3:
+        text += "Obwohl der Angreifer dem Tod nah ist, bricht der Angriff verzweifelt hervor. "
+    elif verteidiger["lp"] <= 3:
+        text += f"Ein vernichtender Schlag gegen den bereits wankenden {name_v}! "
+
+    # Schadenstyp-Flavour
+    if skill["typ"] == "wuchtig":
+        text += f"Die Wucht des Angriffs lässt den Boden erzittern und schmettert durch die feindliche Rüstung! (**-{schaden} LP**)"
+    elif effekt:
+        eff_texte = {"brennend": "🔥 Flammen breiten sich aus!", "blutend": "🩸 Tiefes Fleisch wird zerrissen!", "niedergehalten": "😨 Panik bricht aus!"}
+        text += f"Der Treffer sitzt! {eff_texte.get(effekt, '')} (**-{schaden} LP**)"
+    else:
+        text += f"Ein sauberer Treffer schwächt das Ziel. (**-{schaden} LP**)"
+
+    return text
+
+def wuerfele_angriff(skill, angreifer_effekte, verteidiger_type):
     wuerfel = random.randint(1, 6)
+    
+    # Modifikatoren durch Statuseffekte oder Fraktionen
+    ziel = 3
+    if skill["typ"] == "wuchtig": ziel += 1
+    if verteidiger_type == "nl" and random.random() > 0.7: ziel += 1 # NL Passiv-Ausweichen
+    if "niedergehalten" in angreifer_effekte: ziel += 1 # Eigener Malus
+        
     schaden = 0
-    extra_text = ""
-    
-    if wuerfel >= ziel_wert:
-        schaden = 2
-        # Ork Bonus bei einer 6
-        if wuerfel == 6 and angreifer_type == "orks":
-            extra_text = " (💥 WAAAGH! Bonus-Dakka!)"
-            bonus_wuerfel = random.randint(1, 6)
-            if bonus_wuerfel >= ziel_wert:
-                schaden += 2
-    
-    return wuerfel, schaden, extra_text
+    if wuerfel >= ziel:
+        schaden = skill["schaden"]
+        if wuerfel == 6: schaden += 1 # Kritischer Treffer
+    return wuerfel, schaden
 
 def empfange_daten():
-    global conn, mein_zug, spiel_aktiv, gegner_char
+    global conn, mein_zug, spiel_aktiv, gegner_char, aktive_effekte_spieler, aktive_effekte_gegner
     while spiel_aktiv:
         try:
             daten = conn.recv(1024).decode('utf-8')
             if not daten: break
-            
             befehl, wert = daten.split(":", 1)
             
             if befehl == "HELLO":
-                name, g_type = wert.split(",", 1)
-                gegner_char["name"] = name
-                gegner_char["type"] = g_type
-                print(f"\n🤝 Verbindung steht! Dein Gegner ist: {gegner_char['name']}")
-                if mein_zug:
-                    print("\n⚔️ Du bist am Zug! Tippe 'schlagen' zum Angreifen.")
+                idx = wert.strip()
+                gegner_char = SUBKLASSEN[idx].copy()
+                print(f"\n🤝 Match steht! Dein Gegner: {gegner_char['name']}")
+                print(f"ℹ️ Passiv des Gegners: {gegner_char['passiv']}")
+                if mein_zug: zeige_kampf_interface()
             
             elif befehl == "ANGRIFF":
-                schaden = int(wert)
+                skill_id, wuerfel, schaden, effekt = wert.split(",")
+                wuerfel, schaden = int(wuerfel), int(schaden)
+                skill = gegner_char["skills"][skill_id]
+                
+                narrativ = generiere_narrative(gegner_char, mein_char, skill, wuerfel, schaden, effekt if effekt != "None" else None)
+                print(f"\n{narrativ}")
+                
                 mein_char["lp"] -= schaden
-                print(f"\n💥 {gegner_char['name']} greift an und macht {schaden} Schaden!")
-                print(f"❤️ Deine verbleibenden LP: {max(0, mein_char['lp'])}")
+                if effekt != "None" and effekt not in aktive_effekte_spieler:
+                    aktive_effekte_spieler.append(effekt)
+                
+                print(f"\n❤️ Deine LP: {max(0, mein_char['lp'])}/{mein_char['max_lp']} | Gegner LP: {gegner_char['lp']}/{gegner_char['max_lp']}")
                 
                 if mein_char["lp"] <= 0:
-                    print("\n💀 DU BIST GEFALLEN... Der Feind triumphiert.")
+                    print("\n💀 DU BIST GEFALLEN... Die Schlacht ist verloren.")
                     conn.sendall("ENDE:VERLOREN".encode('utf-8'))
                     spiel_aktiv = False
                     break
                 
+                # Zugwechsel zu dir -> Deine Effekte triggern am Anfang deines Zuges
+                aktive_effekte_spieler = verarbeite_statuseffekte(mein_char, aktive_effekte_spieler, True)
                 mein_zug = True
-                print("\n⚔️ Du bist am Zug! Tippe 'schlagen' zum Angreifen.")
-                
+                zeige_kampf_interface()
+            
             elif befehl == "ENDE":
-                print("\n🏆 SIEG! Der Feind wurde vernichtet!")
+                print("\n🏆 SIEG! Du hast das Duell im Namen deiner Fraktion entschieden!")
                 spiel_aktiv = False
                 break
         except:
@@ -91,46 +194,64 @@ def get_local_ip():
     try:
         s.connect(('10.255.255.255', 1))
         ip = s.getsockname()[0]
-    except Exception:
+    except:
         ip = '127.0.0.1'
     finally:
         s.close()
     return ip
 
-def bot_turn():
-    global mein_zug, spiel_aktiv
-    print(f"\n🤖 {gegner_char['name']} überlegt...")
-    time.sleep(1.5)
-    
-    # Thousand Sons Psi-Schaden vorweg
-    if gegner_char["type"] == "ts":
-        print("🔮 Warp-Blitze zucken! Tödlicher Psi-Schaden.")
-        mein_char["lp"] -= 1
-        print(f"💥 Du verlierst 1 LP durch Hexerei! (Deine LP: {max(0, mein_char['lp'])})")
-        if mein_char["lp"] <= 0:
-            print("\n💀 DU BIST GEFALLEN... Die KI triumphiert.")
-            spiel_aktiv = False
-            return
+def zeige_kampf_interface():
+    print(f"\n--- DEIN ZUG --- (LP: {mein_char['lp']}/{mein_char['max_lp']} | Effekte: {aktive_effekte_spieler})")
+    print("Wähle deine Attacke:")
+    for k, v in mein_char["skills"].items():
+        eff_info = f" [Effekt: {v['effekt']}]" if v['effekt'] else ""
+        print(f"{k} - {v['name']} (Schaden: {v['schaden']}){eff_info} -> {v['desc']}")
+    print("> ", end="")
+    sys.stdout.flush()
 
-    wuerfel, schaden, extra = wuerfele_schaden(gegner_char["type"], mein_char["type"])
+def bot_turn():
+    global mein_zug, spiel_aktiv, aktive_effekte_gegner, aktive_effekte_spieler
+    print(f"\n🤖 {gegner_char['name']} bereitet seinen Angriff vor...")
+    time.sleep(2.0)
     
-    if schaden > 0:
-        print(f"🎲 Bot würfelt: {wuerfel} -> Treffer!{extra} Er macht {schaden} Schaden.")
-        mein_char["lp"] -= schaden
-    else:
-        print(f"🎲 Bot würfelt: {wuerfel} -> Daneben!")
+    skill_id = random.choice(["1", "2", "3"])
+    skill = gegner_char["skills"][skill_id]
+    
+    wuerfel, schaden = wuerfele_angriff(skill, aktive_effekte_gegner, mein_char["fraktion"])
+    effekt = skill["effekt"] if schaden > 0 else None
+    
+    narrativ = generiere_narrative(gegner_char, mein_char, skill, wuerfel, schaden, effekt)
+    print(f"\n{narrativ}")
+    
+    mein_char["lp"] -= schaden
+    if effekt and effekt not in aktive_effekte_spieler:
+        aktive_effekte_spieler.append(effekt)
         
-    print(f"❤️ Deine verbleibenden LP: {max(0, mein_char['lp'])}")
+    print(f"❤️ Deine LP: {max(0, mein_char['lp'])}/{mein_char['max_lp']} | Gegner LP: {gegner_char['lp']}/{gegner_char['max_lp']}")
     
     if mein_char["lp"] <= 0:
-        print("\n💀 DU BIST GEFALLEN... Die KI triumphiert.")
+        print("\n💀 DU BIST GEFALLEN... Der Bot triumphiert.")
         spiel_aktiv = False
     else:
+        # Dein Zug startet: Deine Effekte werden ausgewertet
+        aktive_effekte_spieler = verarbeite_statuseffekte(mein_char, aktive_effekte_spieler, True)
+        if mein_char["lp"] <= 0:
+            print("\n💀 Du bist an deinen Statuseffekten krepiert!")
+            spiel_aktiv = False
+            return
         mein_zug = True
-        print("\n⚔️ Du bist am Zug! Tippe 'schlagen' zum Angreifen.")
+        zeige_kampf_interface()
 
 def main():
-    global conn, mein_zug, spiel_aktiv, gegner_char, bot_modus
+    global conn, mein_zug, spiel_aktiv, gegner_char, bot_modus, mein_char, aktive_effekte_gegner, aktive_effekte_spieler
+    
+    print("Verfügbare Subklassen:")
+    for k, v in SUBKLASSEN.items():
+        print(f"{k} - {v['name']} (LP: {v['max_lp']}) \n    💪 Passiv: {v['passiv']}")
+    
+    sk_wahl = input("\nWähle deine Subklasse (1-6): ").strip()
+    if sk_wahl not in SUBKLASSEN: sk_wahl = "1"
+    mein_char = SUBKLASSEN[sk_wahl].copy()
     
     print("\nSpielmodus wählen:")
     print("1 - Gegen einen Bot spielen (KI)")
@@ -140,14 +261,13 @@ def main():
     
     if modus == "1":
         bot_modus = True
-        # Bot wählt zufällige andere Fraktion
-        bot_wahl = random.choice([k for k in fraktionen.keys() if k != wahl])
-        gegner_char = fraktionen[bot_wahl].copy()
+        bot_wahl = random.choice([k for k in SUBKLASSEN.keys() if SUBKLASSEN[k]["fraktion"] != mein_char["fraktion"]])
+        gegner_char = SUBKLASSEN[bot_wahl].copy()
         gegner_char["name"] = "Servo-Bot [" + gegner_char["name"] + "]"
         
         print(f"\n🤖 Bot-Match gestartet gegen: {gegner_char['name']}")
         mein_zug = True
-        print("\n⚔️ Du bist am Zug! Tippe 'schlagen' zum Angreifen.")
+        zeige_kampf_interface()
         
     else:
         port = 50005
@@ -158,67 +278,61 @@ def main():
             local_ip = get_local_ip()
             s.bind(('0.0.0.0', port))
             s.listen(1)
-            print(f"\n📡 Warte auf Verbindung auf Port {port}...")
-            print(f"👉 Deine IP-Adresse lautet: {local_ip}")
+            print(f"\n📡 Warte auf Verbindung auf Port {port}...\n👉 Deine IP: {local_ip}")
             conn, addr = s.accept()
             mein_zug = True  
         else:
-            ip = input("Gib die IP-Adresse des anderen Geräts ein: ").strip()
+            ip = input("IP-Adresse des Hosts: ").strip()
             s.connect((ip, port))
             conn = s
             mein_zug = False 
             
-        # Start-Daten austauschen (Name + Fraktionstyp)
-        conn.sendall(f"HELLO:{mein_char['name']},{mein_char['type']}".encode('utf-8'))
-        
+        conn.sendall(f"HELLO:{sk_wahl}".encode('utf-8'))
         empfang_thread = threading.Thread(target=empfange_daten, daemon=True)
         empfang_thread.start()
     
-    # Hauptschleife für das Spiel
     while spiel_aktiv:
         if mein_zug:
-            aktion = input("> ").strip().lower()
-            if aktion == "schlagen":
-                # Thousand Sons Spieler Psi-Phase
-                if mein_char["type"] == "ts":
-                    print("🔮 Deine Hexerei fügt dem Feind 1 garantierten Schaden zu!")
-                    gegner_char["lp"] -= 1
-                    print(f"💥 Gegner verbleibende LP: {max(0, gegner_char['lp'])}")
-                    if gegner_char["lp"] <= 0:
-                        print("\n🏆 SIEG! Der Feind wurde vernichtet!")
-                        if not bot_modus: conn.sendall("ENDE:SIEG".encode('utf-8'))
-                        spiel_aktiv = False
-                        break
+            skill_wahl = input("").strip()
+            if skill_wahl not in mein_char["skills"]:
+                skill_wahl = "1"
                 
-                # Normaler Angriffswurf
-                wuerfel, schaden, extra = wuerfele_schaden(mein_char["type"], gegner_char["type"])
+            skill = mein_char["skills"][skill_wahl]
+            wuerfel, schaden = wuerfele_angriff(skill, aktive_effekte_spieler, gegner_char["fraktion"])
+            effekt = skill["effekt"] if schaden > 0 else None
+            
+            narrativ = generiere_narrative(mein_char, gegner_char, skill, wuerfel, schaden, effekt)
+            print(f"\n{narrativ}")
+            
+            gegner_char["lp"] -= schaden
+            if effekt and effekt not in aktive_effekte_gegner:
+                aktive_effekte_gegner.append(effekt)
                 
-                if schaden > 0:
-                    print(f"🎲 Gewürfelt: {wuerfel} -> Treffer!{extra} Du machst {schaden} Schaden.")
-                    gegner_char["lp"] -= schaden
-                else:
-                    print(f"🎲 Gewürfelt: {wuerfel} -> Daneben!")
-                    
-                print(f"🍏 Gegner verbleibende LP: {max(0, gegner_char['lp'])}")
+            print(f"❤️ Deine LP: {mein_char['lp']}/{mein_char['max_lp']} | Gegner LP: {max(0, gegner_char['lp'])}/{gegner_char['max_lp']}")
+            
+            if gegner_char["lp"] <= 0:
+                print("\n🏆 SIEG! Du hast den feindlichen Anführer im Staub zerschmettert!")
+                if not bot_modus: conn.sendall("ENDE:SIEG".encode('utf-8'))
+                spiel_aktiv = False
+                break
                 
+            mein_zug = False
+            if bot_modus:
+                # Bevor der Bot zieht, triggern seine Statuseffekte
+                aktive_effekte_gegner = verarbeite_statuseffekte(gegner_char, aktive_effekte_gegner, False)
                 if gegner_char["lp"] <= 0:
-                    print("\n🏆 SIEG! Der Feind wurde vernichtet!")
-                    if not bot_modus: conn.sendall("ENDE:SIEG".encode('utf-8'))
+                    print("\n🏆 SIEG! Der Bot ist an seinen Statuseffekten verreckt!")
                     spiel_aktiv = False
                     break
-                
-                mein_zug = False
-                
-                if bot_modus:
-                    bot_turn()
-                else:
-                    conn.sendall(f"ANGRIFF:{schaden}".encode('utf-8'))
-                    print("⏳ Wartet auf den Zug des Gegners...")
+                bot_turn()
+            else:
+                conn.sendall(f"ANGRIFF:{skill_wahl},{wuerfel},{schaden},{effekt}".encode('utf-8'))
+                # Bevor der Gegner am Zug ist, laufen seine Effekte drüben automatisch ab
+                print("\n⏳ Wartet auf den Zug des Gegners...")
         else:
             time.sleep(0.1)
 
-    if conn:
-        conn.close()
+    if conn: conn.close()
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import random
+import time
+import sys
+import shutil
+
+def simulations_kampf():
+    cols, _ = shutil.get_terminal_size()
+    anzahl_zellen = min(60, cols - 2)
+    
+    # Start-Array voller Nullen und Einsen generieren
+    welt = [random.choice(["0", "1"]) for _ in range(anzahl_zellen)]
+    
+    print("🧬 STARTE DIGITALE LEBENS-SIMULATION...")
+    time.sleep(1.5)
+    
+    try:
+        while True:
+            # Eine zufällige Zelle mutiert oder infiziert ihre Nachbarn
+            index = random.randint(0, anzahl_zellen - 1)
+            wert = welt[index]
+            
+            # Nachbarn anstecken
+            if index > 0: welt[index - 1] = wert
+            if index < anzahl_zellen - 1: welt[index + 1] = wert
+            
+            # Zählen, wer führt
+            nullen = welt.count("0")
+            einsen = welt.count("1")
+            
+            # Zeile farbig formatieren (0 = Rot, 1 = Blau)
+            ausgabe_string = ""
+            for zelle in welt:
+                if zelle == "0": ausgabe_string += "\033[31m0\033[0m"
+                else: ausgabe_string += "\033[34m1\033[0m"
+                
+            # Fliegendes Update der Zeile
+            sys.stdout.write(f"\r[{ausgabe_string}] |🔴 Nullen: {nullen} vs. Blitze: {einsen}🔵  ")
+            sys.stdout.flush()
+            
+            time.sleep(0.02)
+            
+            # Wenn eine Fraktion komplett gewinnt, bricht das Spiel ab
+            if nullen == anzahl_zellen:
+                print("\n\n🏆 FRAKTION NULL [0] HAT DAS TERMINAL KOMPLETT INFIZIERT!"); break
+            if einsen == anzahl_zellen:
+                print("\n\n🏆 FRAKTION EINS [1] HAT DIE ABSOLUTE KONTROLLE ERREICHT!"); break
+                
+    except KeyboardInterrupt:
+        print("\n\n🧬 Experiment abgebrochen. Die Kulturen wurden eingefroren.")
+
+if __name__ == "__main__":
+    simulations_kampf()

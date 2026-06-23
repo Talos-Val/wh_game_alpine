@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+import time
+import sys
+import random
+
+def ghost_type():
+    text = input("Was soll der Ghost-Writer tippen? ").strip()
+    if not text: text = "Ich hacke das System in Rekordzeit und trinke dabei Knabemalz."
+    
+    print("\n✍️  Der Ghost-Writer legt los...\n")
+    
+    for buchstabe in text:
+        # Chance auf einen Vertipper (10%)
+        if random.random() < 0.1 and buchstabe != " ":
+            falscher_buchstabe = random.choice("abcdefghijklmnopqrstuvwxyz")
+            sys.stdout.write(falscher_buchstabe)
+            sys.stdout.flush()
+            time.sleep(0.2)
+            
+            # Kurz zögern vor dem Löschen
+            time.sleep(0.1)
+            # \b ist der ANSI-Code für Backspace (Zeichen löschen)
+            sys.stdout.write("\b \b")
+            sys.stdout.flush()
+            time.sleep(0.1)
+            
+        sys.stdout.write(buchstabe)
+        sys.stdout.flush()
+        # Zufällige Tipp-Verzögerung für Realismus
+        time.sleep(random.uniform(0.05, 0.15))
+        
+    print("\n\n✅ Text fehlerfrei (nach ein paar Fehlversuchen) beendet.\n")
+
+if __name__ == "__main__":
+    ghost_type()

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+import sys
+
+def uebersetze_zu_bork(text):
+    # Einfache Übersetzungs-Regeln für den Muppet-Chefkoch-Sound
+    regeln = {
+        "die ": "dee ", "Die ": "Dee ",
+        "der ": "derb ", "Der ": "Derb ",
+        "das ": "dask ", "Das ": "Dask ",
+        "ein ": "oen ", "Ein ": "Oen ",
+        "eine ": "oene ", "Eine ": "Oene ",
+        "ist ": "is-bork ",
+        "ich ": "bork-ich ",
+        "und ": "und-bork ",
+    }
+    
+    ergebnis = text
+    for alt, neu in regeln.items():
+        ergebnis = ergebnis.replace(alt, neu)
+        
+    # Buchstaben-Verzerrungen für den Akzent
+    ergebnis = ergebnis.replace("a", "ö").replace("o", "u").replace("e ", "ör ")
+    
+    # Das obligatorische Finale am Satzende
+    if ergebnis.strip():
+        ergebnis = ergebnis.strip() + ", bork bork bork!"
+        
+    return ergebnis
+
+def main():
+    # Prüfen, ob Text über eine Pipe (z.B. echo "hallo" | bork-filter) kommt
+    if not sys.stdin.isatty():
+        eingabe = sys.stdin.read()
+        print(uebersetze_zu_bork(eingabe))
+    else:
+        # Interaktiver Modus, falls man es einfach so startet
+        print("Tippe etwas ein (drücke Enter zum Übersetzen, Strg+C zum Beenden):")
+        try:
+            while True:
+                linie = input("> ")
+                print(uebersetze_zu_bork(linie))
+        except (KeyboardInterrupt, EOFError):
+            print("\nBork bork! Tschüss!")
+
+if __name__ == "__main__":
+    main()

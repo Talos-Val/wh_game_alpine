@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+import random
+import sys
+
+# Ghazghulls Wut-Wortschatz
+subjekte = ["Du madiger Git", "Dein Rüstschrott", "Du winziger Squig-Schubser", "Dein Code", "Du wandelnder Rationsbeutel", "Deine Ausrüstung"]
+verben = ["riecht nach", "ist nützlicher als", "schmeckt wie", "läuft so stabil wie", "funktioniert wie", "ist so schlau wie"]
+objekte = ["ein verfaulter Grot.", "ein leerer Schoota im Gefecht.", "ein betrunkener Snotling.", "ein verrostetes Kettenschwert im Regen.", "der Hintern eines Squigs.", "ein Space Marine, der nach Hause weint."]
+
+def generiere_beleidigung():
+    s = random.choice(subjekte)
+    v = random.choice(verben)
+    o = random.choice(objekte)
+    return f"{s} {v} {o}"
+
+def ghaz_say():
+    text = generiere_beleidigung().upper()
+    breite = len(text) + 2
+    
+    # Die Sprechblase bauen
+    print(" " + "_" * breite)
+    print(f"< {text} >")
+    print(" " + "-" * breite)
+    
+    # Ghazghulls ASCII-Kopf
+    ghaz_art = r"""
+          \   
+           \   ⚡ WAAAGH! ⚡
+            \
+             \     HHH   HHH
+              \   ##########
+                 ## 💥  💥 ##
+                [############]
+                |  ((    ))  |
+                |   \____/   |
+               /==============\
+              / ||  ||  ||  || \
+             * ||  ||  ||  ||  *
+                ^^  ^^  ^^  ^^
+               GHAZGHULL THRAKA
+    """
+    print(ghaz_art)
+
+if __name__ == "__main__":
+    ghaz_say()

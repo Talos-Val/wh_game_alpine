@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+import os
+import sys
+import urllib.request
+
+# --- DEINE REPO-DATEN ---
+GITHUB_USER = "Talos-Val"
+REPO_NAME = "linux_tools"
+# -----------------------
+
+# Die Namen in der Liste sind gleichzeitig die Dateinamen auf GitHub
+# UND der Befehl, den du im Terminal zum Starten eintippst.
+TOOLS = {
+    "binary-life": "Simulation: Nullen und Einsen kämpfen um die Shell.",
+    "bork-filter": "Muppet-Chefkoch-Übersetzer.",
+    "busy-worker": "Fake-Ladebalken zur Arbeits-Tarnung.",
+    "casino-slot": "Einarmiger Bandit mit Emojis.",
+    "cli-clicker": "Idle-Clicker-Spiel mit Auto-Coder-Bots.",
+    "crazy-pass": "Generiert extrem sichere, absurde Passwörter.",
+    "doom-fortune": "Düstere Zukunftsvorhersagen.",
+    "ghaz-say": "Ghazghull beleidigt dich.",
+    "ghost-type": "Tipp-Effekt mit absichtlichen Fehlern.",
+    "my-squig": "Dein Terminal-Tamagotchi.",
+    "rage-timer": "Passiv-aggressiver Countdown-Wecker.",
+    "sound-reflex": "Reflex-Test via Piepton.",
+    "spacemarine-quote": "Epischer Motivations-Banner.",
+    "terminal-beep": "Wandelt Text in Morse-Code um.",
+    "wh-alpine": "Das Warhammer-Hauptspiel."
+}
+
+INSTALL_DIR = "/usr/local/bin"
+
+def zeige_uebersicht():
+    print("\n" + "="*60)
+    print("🤖  TERMINAL-TOOLS: STARTE MIT DEM TOOLNAMEN  🤖")
+    print("="*60)
+    for befehl, info in TOOLS.items():
+        print(f"  \033[92m{befehl:<20}\033[0m -> {info}")
+    print("="*60)
+    print("Tippe einfach den grünen Namen ein, um das Tool zu starten!\n")
+
+def installiere_tools():
+    print(f"🌐 Lade Tools von github.com/{GITHUB_USER}/{REPO_NAME}...")
+    for tool in TOOLS.keys():
+        url = f"https://raw.githubusercontent.com/{GITHUB_USER}/{REPO_NAME}/main/{tool}"
+        ziel_pfad = os.path.join(INSTALL_DIR, tool)
+        
+        try:
+            urllib.request.urlretrieve(url, ziel_pfad)
+            os.chmod(ziel_pfad, 0o755)
+            print(f"✅ {tool} bereit.")
+        except Exception:
+            print(f"❌ Fehler bei {tool}")
+    print("\n🔄 Alle Tools wurden aktualisiert und sind unter ihrem Namen startbereit.")
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--install":
+        installiere_tools()
+    else:
+        zeige_uebersicht()

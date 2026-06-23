@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+import time
+import sys
+
+def start_timer():
+    try:
+        eingabe = input("Für wie viele Sekunden willst du den Timer stellen? ")
+        sekunden = int(eingabe)
+        
+        print("\n⏳ Timer läuft... wehe du arbeitest nicht!")
+        for i in range(sekunden, 0, -1):
+            sys.stdout.write(f"\rNoch {i} Sekunden Restlebenszeit für diese Aufgabe...")
+            sys.stdout.flush()
+            time.sleep(1)
+            
+        print("\n\n🚨⏰ ALARM!!! ⏰🚨")
+        # \a löst auf vielen Systemen einen echten Terminal-Beep aus
+        while True:
+            sys.stdout.write("\r🚨 STEH AUF! MACH WEITER! DRÜCKE STRG+C UM MICH ZU STOPPEN!!! 🚨 \a")
+            sys.stdout.flush()
+            time.sleep(0.5)
+            sys.stdout.write("\r                                                                      ")
+            sys.stdout.flush()
+            time.sleep(0.5)
+            
+    except KeyboardInterrupt:
+        print("\n\nUff... Na gut. Alarm deaktiviert. Schnauf erst mal durch.")
+    except ValueError:
+        print("Gib gefälligst eine echte Zahl ein, du Git!")
+
+if __name__ == "__main__":
+    start_timer()

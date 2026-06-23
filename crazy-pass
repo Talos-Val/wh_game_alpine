@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+import random
+
+woerter = ["Kekskrümel", "WLAN-Kabel", "Nudelsalat", "Tastatur", "Feierabend", "Prozessor", "Kaffeetasse", "Datenmüll"]
+flueche = ["Verdammt nochmal", "SyntaxError", "Scheiss-Bug", "WAAAGH", "BorkBork", "NullPointer"]
+sonderzeichen = ["!?", "@#", "---", "$$$", "!!11!!", "???"]
+
+def generiere_passwort():
+    w1 = random.choice(woerter)
+    f = random.choice(flueche)
+    w2 = random.choice(woerter)
+    s = random.choice(sonderzeichen)
+    zahl = random.randint(100, 999)
+    
+    # Würfelt die Reihenfolge durcheinander
+    passwort = f"{w1}_{f}_{zahl}{s}_{w2}"
+    
+    print("\n🔐 DEIN ABSURD SICHERES PASSWORT 🔐")
+    print("-" * (len(passwort) + 4))
+    print(f"  {passwort}  ")
+    print("-" * (len(passwort) + 4))
+    print("Merken kann man sich das zwar nicht, aber knacken erst recht niemand!\n")
+
+if __name__ == "__main__":
+    generiere_passwort()

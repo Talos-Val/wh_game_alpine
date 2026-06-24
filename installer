@@ -25,7 +25,8 @@ TOOLS = {
     "spacemarine-quote": "Epischer Motivations-Banner.",
     "terminal-beep": "Wandelt Text in Morse-Code um.",
     "wh-alpine": "Das Warhammer-Hauptspiel.",
-    "worm-race": "Ein Wurmrennen."
+    "worm-race": "Ein Wurmrennen.",
+    "mournival": Eine Gruppe, die deine Ideen nach Schwachstellen absucht."
 }
 
 INSTALL_DIR = "/usr/local/bin"

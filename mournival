@@ -1,0 +1,1306 @@
+#!/usr/bin/env python3
+"""
+mournival - Der Kritikerrat
+Analysiert Pläne und Aussagen auf logische Schwachstellen.
+Pure Python 3 - keine externen Abhängigkeiten.
+
+Verwendung:
+  python3 mournival.py
+  ./mournival.py
+  cat plan.txt | python3 mournival.py
+"""
+
+import sys
+import re
+import textwrap
+from dataclasses import dataclass, field
+from enum import Enum
+
+# ═══════════════════════════════════════════════════════
+#  ANSI / Farben
+# ═══════════════════════════════════════════════════════
+
+def _tty() -> bool:
+    return hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+
+class Col:
+    RED    = "\033[91m"
+    YELLOW = "\033[93m"
+    GREEN  = "\033[92m"
+    CYAN   = "\033[96m"
+    MAGENTA= "\033[95m"
+    BLUE   = "\033[94m"
+    BOLD   = "\033[1m"
+    DIM    = "\033[2m"
+    RESET  = "\033[0m"
+
+def c(code: str, text: str) -> str:
+    return f"{code}{text}{Col.RESET}" if _tty() else text
+
+# ═══════════════════════════════════════════════════════
+#  Datenstrukturen
+# ═══════════════════════════════════════════════════════
+
+class Role(Enum):
+    DOUBTER   = ("🗡", "Der Zweifler",   Col.YELLOW)   # Annahmen
+    PESSIMIST = ("🛡", "Der Pessimist",  Col.RED)      # Fehlende Absicherung
+    LOGICIAN  = ("⚖", "Der Logiker",    Col.CYAN)     # Widersprüche / Lücken
+    FOOL      = ("🃏", "Der Narr",       Col.MAGENTA)  # Übersehenes Offensichtliches
+
+    def __init__(self, icon: str, label: str, color: str):
+        self.icon  = icon
+        self.label = label
+        self.color = color
+
+@dataclass
+class Finding:
+    role:    Role
+    title:   str
+    detail:  str
+    excerpt: str = ""   # relevanter Textteil
+
+@dataclass
+class AnalysisResult:
+    findings: list[Finding] = field(default_factory=list)
+
+    def add(self, role: Role, title: str, detail: str, excerpt: str = ""):
+        self.findings.append(Finding(role, title, detail, excerpt))
+
+    def by_role(self, role: Role) -> list[Finding]:
+        return [f for f in self.findings if f.role == role]
+
+# ═══════════════════════════════════════════════════════
+#  Hilfs-Funktionen
+# ═══════════════════════════════════════════════════════
+
+def sentences(text: str) -> list[str]:
+    parts = re.split(r'(?<=[.!?])\s+|\n{2,}', text.strip())
+    return [p.strip() for p in parts if len(p.strip()) > 8]
+
+def words(text: str) -> list[str]:
+    return re.findall(r'\b\w+\b', text.lower())
+
+def wordset(text: str) -> set[str]:
+    return set(words(text))
+
+def find_matches(pattern: str, text: str, flags=re.IGNORECASE) -> list[str]:
+    hits = re.findall(pattern, text, flags)
+    # Flatten tuples from groups into plain strings
+    return [h[0] if isinstance(h, tuple) else h for h in hits]
+
+def first_sentence_with(text: str, pattern: str) -> str:
+    for s in sentences(text):
+        if re.search(pattern, s, re.IGNORECASE):
+            return s[:120]
+    return ""
+
+def count_matches(patterns: list[str], text: str) -> int:
+    """Zählt alle Treffer über mehrere Muster."""
+    return sum(len(find_matches(p, text)) for p in patterns)
+
+def any_match(patterns: list[str], text: str) -> bool:
+    return any(find_matches(p, text) for p in patterns)
+
+def context_window(text: str, pattern: str, radius: int = 60) -> str:
+    """Gibt den Text um einen Treffer herum zurück (für smartere Erklärungen)."""
+    m = re.search(pattern, text, re.IGNORECASE)
+    if not m:
+        return ""
+    start = max(0, m.start() - radius)
+    end   = min(len(text), m.end() + radius)
+    snippet = text[start:end].strip()
+    return ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else "")
+
+def word_count(text: str) -> int:
+    return len(re.findall(r'\b\w+\b', text))
+
+def dedupe_findings(result: AnalysisResult):
+    """Entfernt Duplikate mit gleichem Titel in derselben Rolle."""
+    seen = set()
+    unique = []
+    for f in result.findings:
+        key = (f.role, f.title)
+        if key not in seen:
+            seen.add(key)
+            unique.append(f)
+    result.findings = unique
+
+# ═══════════════════════════════════════════════════════
+#  REGEL-KATALOG
+# ═══════════════════════════════════════════════════════
+
+# ───────────────────────────────────────────────────────
+# 🗡 DER ZWEIFLER — Ungeprüfte Annahmen
+# ───────────────────────────────────────────────────────
+
+# Wörter die Annahmen signalisieren ohne Begründung
+ASSUMPTION_HEDGES = [
+    # Deutsch — Erwartungen ohne Evidenz
+    r'\b(wird schon|wird sicher|sollte (reichen|klappen|funktionieren|genügen|passen))\b',
+    r'\b(wahrscheinlich|vermutlich|eigentlich|im grunde|prinzipiell|im wesentlichen)\b',
+    r'\b(natürlich|selbstverständlich|offensichtlich|logischerweise|zwangsläufig)\b',
+    r'\b(alle werden|jeder wird|man wird|die leute werden|kunden werden|nutzer werden)\b',
+    r'\b(das läuft|das klappt|das funktioniert schon|geht schon|passt schon)\b',
+    r'\b(erfahrungsgemäß|üblicherweise|normalerweise|in der regel|typischerweise)\b',
+    r'\b(ohne weiteres|problemlos|reibungslos|ohne probleme|einfach so)\b',
+    r'\b(ist klar|ist bekannt|ist ja bekannt|weiß jeder|liegt auf der hand)\b',
+    r'\b(automatisch|von selbst|von allein|von alleine)\b',
+    # Englisch
+    r'\b(should be enough|probably|supposedly|obviously|naturally|of course)\b',
+    r'\b(will surely|will definitely|must be|certainly|clearly|evidently)\b',
+    r'\b(everyone knows|it is known|goes without saying|needless to say)\b',
+    r'\b(automatically|by itself|by default|inherently|inevitably)\b',
+    r'\b(users will|customers will|people will|they will just|they will simply)\b',
+    r'\b(no problem|no issue|no trouble|easily|effortlessly|seamlessly)\b',
+]
+
+# Passiv ohne Verantwortlichen — diffuse Zuständigkeit
+PASSIVE_NO_ACTOR = [
+    # Deutsch
+    r'\b(wird erledigt|wird gemacht|wird geregelt|wird organisiert|wird geklärt)\b',
+    r'\b(soll erledigt|soll gemacht|soll geregelt|soll geklärt|soll organisiert)\b',
+    r'\b(muss noch|noch zu klären|noch offen|noch unklar|noch nicht geklärt)\b',
+    r'\b(wird sich zeigen|wird sich ergeben|ergibt sich von selbst|läuft sich ein)\b',
+    r'\b(kümmert sich jemand|wird jemand|macht jemand|regelt sich)\b',
+    r'\b(wird koordiniert|wird abgestimmt|wird kommuniziert|wird übergeben)\b',
+    r'\b(muss koordiniert|muss abgestimmt|muss kommuniziert|muss übergeben)\b',
+    # Englisch
+    r'\b(will be done|will be handled|will be organized|will be managed|gets done)\b',
+    r'\b(will be coordinated|will be communicated|will be resolved|will be addressed)\b',
+    r'\b(needs to be done|has to be done|must be handled|should be handled)\b',
+    r'\b(will figure itself out|will sort itself out|will come together)\b',
+    r'\b(someone will|somebody will|they will handle|it will get done)\b',
+]
+
+# Externe Abhängigkeiten ohne Plan B
+EXTERNAL_DEPENDENCY = [
+    # Deutsch
+    r'\b(hängt ab von|abhängig von|basiert auf|setzt voraus|bedingt durch)\b',
+    r'\b(wenn .{0,40} zustimmt|wenn .{0,40} liefert|wenn .{0,40} erlaubt)\b',
+    r'\b(sobald .{0,40} fertig|nachdem .{0,40} geliefert|falls .{0,40} genehmigt)\b',
+    r'\b(wartet auf|warten auf|blockiert durch|gebunden an|angewiesen auf)\b',
+    r'\b(partner (liefert|stellt bereit|übernimmt)|lieferant|drittanbieter|extern)\b',
+    r'\b(behörde (genehmigt|erlaubt)|genehmigung steht aus|zulassung fehlt)\b',
+    # Englisch
+    r'\b(depends on|relies on|contingent on|predicated on|hinges on)\b',
+    r'\b(if .{0,40} agrees|if .{0,40} delivers|if .{0,40} approves|if .{0,40} completes)\b',
+    r'\b(waiting for|blocked by|dependent on|tied to|reliant on)\b',
+    r'\b(third.party|vendor|partner (delivers|provides|handles)|external (team|service))\b',
+    r'\b(pending (approval|review|sign.off|sign off)|awaiting (approval|confirmation))\b',
+]
+
+# Nicht belegbare Wachstums-/Marktannahmen
+MARKET_ASSUMPTIONS = [
+    r'\b(der markt (will|braucht|ist bereit)|kunden wollen das|es gibt bedarf)\b',
+    r'\b(wir werden (viele|genug|ausreichend) (kunden|nutzer|käufer) haben)\b',
+    r'\b(das produkt verkauft sich|das (läuft|geht) weg wie|reißenden absatz)\b',
+    r'\b(the market (wants|needs|is ready)|customers want this|there is demand)\b',
+    r'\b(it will sell itself|product.market fit|viral growth|exponential growth)\b',
+    r'\b(wir sind die ersten|first mover|kein wettbewerb|keine konkurrenz)\b',
+    r'\b(no competition|first to market|unique|only one|nobody else does)\b',
+]
+
+# Kompetenz-Annahmen
+COMPETENCE_ASSUMPTIONS = [
+    r'\b(das (können|schaffen) wir|wir haben die kompetenz|wir kennen uns aus)\b',
+    r'\b(ist kein problem für uns|machen wir selbst|intern lösbar)\b',
+    r'\b(we can do this|we have the expertise|we know how to|we can handle)\b',
+    r'\b(in.house|internally|ourselves|our team can)\b',
+]
+
+def check_doubter(text: str, result: AnalysisResult):
+    sents = sentences(text)
+    wc = word_count(text)
+
+    # ── Ungesicherte Annahmen ──────────────────────────────
+    assumption_hits = []
+    assumption_excerpt = ""
+    for pattern in ASSUMPTION_HEDGES:
+        hits = find_matches(pattern, text)
+        if hits:
+            assumption_hits.extend(hits)
+            if not assumption_excerpt:
+                assumption_excerpt = first_sentence_with(text, pattern)
+
+    if assumption_hits:
+        count = len(assumption_hits)
+        examples = ", ".join(f"'{h}'" for h in assumption_hits[:3])
+        if count == 1:
+            detail = (
+                f"Das Wort {examples} signalisiert eine Annahme, die nicht belegt ist. "
+                f"Annahmen sind der häufigste Grund warum Pläne scheitern — nicht wegen "
+                f"schlechter Ausführung, sondern weil die Grundlage nicht stimmte. "
+                f"Stell dir vor, diese Annahme ist falsch: Was passiert dann mit dem Plan?"
+            )
+        else:
+            detail = (
+                f"Der Plan enthält {count} ungeprüfte Annahmen: {examples}. "
+                f"Jede davon ist eine stille Wette. Wenn auch nur eine davon nicht stimmt, "
+                f"kann das die gesamte Kette dahinter zum Einsturz bringen. "
+                f"Welche dieser Annahmen wurde tatsächlich überprüft?"
+            )
+        result.add(Role.DOUBTER, "Ungeprüfte Annahmen", detail, assumption_excerpt)
+
+    # ── Passiv ohne Verantwortlichen ──────────────────────
+    passive_hits = []
+    for pattern in PASSIVE_NO_ACTOR:
+        passive_hits += find_matches(pattern, text)
+    if passive_hits:
+        examples = ", ".join(f"'{h}'" for h in passive_hits[:2])
+        detail = (
+            f"Formulierungen wie {examples} klingen wie ein Plan, "
+            f"sind es aber nicht — sie beschreiben einen Wunsch ohne Träger. "
+            f"In der Praxis bedeutet 'wird erledigt' meistens: niemand fühlt sich zuständig. "
+            f"Wer genau übernimmt die Verantwortung, und bis wann?"
+        )
+        result.add(
+            Role.DOUBTER, "Verantwortlichkeit unklar", detail,
+            first_sentence_with(text, passive_hits[0])
+        )
+
+    # ── Externe Abhängigkeiten ────────────────────────────
+    ext_hits = []
+    for pattern in EXTERNAL_DEPENDENCY:
+        ext_hits += find_matches(pattern, text)
+    if ext_hits:
+        count = len(ext_hits)
+        examples = ", ".join(f"'{h}'" for h in ext_hits[:2])
+        detail = (
+            f"{'Eine externe Abhängigkeit' if count == 1 else f'{count} externe Abhängigkeiten'} "
+            f"({examples}) ohne erkennbare Absicherung. "
+            f"Externe Faktoren — Partner, Behörden, Lieferanten — sind die "
+            f"unzuverlässigsten Teile jedes Plans, weil man sie nicht kontrolliert. "
+            f"Was ist der Plan, wenn diese Abhängigkeit wegfällt, sich verzögert oder teurer wird?"
+        )
+        result.add(
+            Role.DOUBTER, "Externe Abhängigkeit ohne Absicherung", detail,
+            first_sentence_with(text, ext_hits[0])
+        )
+
+    # ── Nicht belegbare Marktannahmen ─────────────────────
+    market_hits = []
+    for pattern in MARKET_ASSUMPTIONS:
+        market_hits += find_matches(pattern, text)
+    if market_hits:
+        detail = (
+            f"Der Plan geht davon aus, dass ein Markt oder eine Nachfrage existiert "
+            f"('{market_hits[0]}'). Das ist eine der gefährlichsten Annahmen überhaupt — "
+            f"die meisten gescheiterten Projekte hatten ein gutes Produkt für eine Nachfrage, "
+            f"die nie existierte. Welche Evidenz stützt diese Marktannahme konkret?"
+        )
+        result.add(
+            Role.DOUBTER, "Ungeprüfte Marktannahme", detail,
+            first_sentence_with(text, market_hits[0])
+        )
+
+    # ── Kompetenz-Annahmen ────────────────────────────────
+    comp_hits = []
+    for pattern in COMPETENCE_ASSUMPTIONS:
+        comp_hits += find_matches(pattern, text)
+    if comp_hits:
+        detail = (
+            f"Der Plan nimmt an, dass die nötige Kompetenz vorhanden ist "
+            f"('{comp_hits[0]}'). Was genau ist diese Kompetenz, und wurde sie bereits "
+            f"in vergleichbaren Situationen bewiesen — oder ist das ebenfalls eine Annahme?"
+        )
+        result.add(
+            Role.DOUBTER, "Kompetenz-Annahme", detail,
+            first_sentence_with(text, comp_hits[0])
+        )
+
+    # ── Ziel ohne Messbarkeit ─────────────────────────────
+    goal_patterns = [
+        r'\b(ziel|ziele|angestrebtes ergebnis|wir wollen|wir möchten|soll erreichen|angestrebt)\b',
+        r'\b(vorhaben|absicht|intention|plan ist|ziel ist es)\b',
+        r'\b(goal|objective|we want|we aim|we plan to|target|intention|desired outcome)\b',
+    ]
+    measure_patterns = [
+        r'\b(\d+\s*%|\d+\s*(stück|einheiten|mal|tage|wochen|monate|euro|dollar|nutzer|kunden))\b',
+        r'\b(bis (januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember))\b',
+        r'\b(bis (q1|q2|q3|q4)|\d{4}|deadline|frist)\b',
+        r'\b(by (january|february|march|april|may|june|july|august|september|october|november|december))\b',
+        r'\b(by q[1-4]|\d{4}|until|no later than)\b',
+        r'\b(kpi|kennzahl|messgröße|metric|benchmark|okr|target value)\b',
+    ]
+    has_goal    = any_match(goal_patterns, text)
+    has_measure = any_match(measure_patterns, text)
+    if has_goal and not has_measure:
+        detail = (
+            "Es gibt ein Ziel, aber keine messbaren Kriterien — keine Zahlen, "
+            "keine Deadlines, keine KPIs. Das ist kein Zufall: Unmessbare Ziele "
+            "können nie scheitern, weshalb sie auch nie erreicht werden. "
+            "Was ist das konkrete, überprüfbare Ergebnis in 3 Monaten?"
+        )
+        result.add(Role.DOUBTER, "Ziel nicht messbar", detail)
+
+    # ── Nur eine Meinung als Validierung ─────────────────
+    single_opinion = [
+        r'\b(ich (glaube|denke|bin überzeugt)|meiner meinung|meiner ansicht)\b',
+        r'\b(I (think|believe|am convinced|feel)|in my opinion|I am sure)\b',
+    ]
+    expert_validation = [
+        r'\b(studie|forschung|daten|umfrage|test|pilot|feedback|validiert|belegt)\b',
+        r'\b(study|research|data|survey|test|pilot|feedback|validated|proven|evidence)\b',
+    ]
+    if any_match(single_opinion, text) and not any_match(expert_validation, text):
+        detail = (
+            "Die einzige Validierung im Plan scheint eine persönliche Überzeugung zu sein. "
+            "Subjektive Gewissheit ist kein Ersatz für externe Evidenz. "
+            "Was sagen Menschen außerhalb des Plans — Kunden, Experten, Daten?"
+        )
+        result.add(Role.DOUBTER, "Fehlende externe Validierung", detail)
+
+
+# ───────────────────────────────────────────────────────
+# 🛡 DER PESSIMIST — Fehlende Absicherung
+# ───────────────────────────────────────────────────────
+
+FALLBACK_INDICATORS = [
+    r'\b(plan b|fallback|alternativ(e|plan)|notfallplan|backup|ausweich)\b',
+    r'\b(falls .{0,50} scheitert|wenn .{0,50} nicht funktioniert|falls .{0,50} wegfällt)\b',
+    r'\b(if .{0,50} fails|if .{0,50} doesn.t work|contingency|backup plan|plan b)\b',
+    r'\b(worst case|schlimmsten fall|notfall|emergency plan|fallback option)\b',
+    r'\b(alternative route|alternative approach|other option|plan c)\b',
+]
+
+RESOURCE_WORDS = [
+    r'\b(budget|kosten|finanzierung|geld|euro|dollar|investition|kapital|mittel)\b',
+    r'\b(ressourcen|aufwand|kosten|gebühren|ausgaben|einnahmen|cashflow)\b',
+    r'\b(budget|cost|funding|money|finance|investment|capital|resources|expenditure)\b',
+    r'\b(revenue|income|profit|loss|burn rate|runway|overhead|expense)\b',
+]
+
+TIME_WORDS = [
+    r'\b(zeitplan|timeline|deadline|frist|bis wann|dauer|zeitraum|meilenstein)\b',
+    r'\b(sprint|iteration|phase|etappe|quartal|q[1-4]|kalender)\b',
+    r'\b(timeline|deadline|schedule|by when|duration|timeframe|milestone|phase)\b',
+    r'\b(sprint|iteration|quarter|q[1-4]|calendar|week \d|month \d)\b',
+]
+
+PERSONNEL_WORDS = [
+    r'\b(team|person|mitarbeiter|wer macht|zuständig|verantwortlich|besetzt|rolle)\b',
+    r'\b(projektleiter|lead|owner|verantwortung|zuständigkeit|aufgabenverteilung)\b',
+    r'\b(team|person|employee|who does|responsible|assigned|staffed|role|owner)\b',
+    r'\b(project lead|task owner|accountability|raci|responsibility matrix)\b',
+]
+
+RISK_WORDS = [
+    r'\b(risiko|risiken|gefahr|problem|herausforderung|schwierigkeit|hürde|hindernis)\b',
+    r'\b(engpass|flaschenhals|blocker|showstopper|kritisch|kritischer pfad)\b',
+    r'\b(risk|risks|danger|problem|challenge|difficulty|obstacle|threat|blocker)\b',
+    r'\b(bottleneck|showstopper|critical path|dependency risk|technical debt)\b',
+]
+
+SINGLE_POINT_PATTERNS = [
+    r'\bnur\s+(?:ich|du|er|sie|wir|ihr)\b',
+    r'\bonly\s+(?:I|you|he|she|we|they)\b',
+    r'\b(einzig(e|er|es)\s+\w+|der einzige|die einzige|only one person|sole responsible)\b',
+    r'\b(alles (hängt|liegt) (an|bei)|alles (steht und) fällt mit)\b',
+    r'\b(everything (depends on|hinges on|rests on)|all depends on)\b',
+]
+
+IRREVERSIBLE_PATTERNS = [
+    r'\b(unwiderruflich|endgültig|nicht rückgängig|permanent|dauerhaft (löschen|entfernen))\b',
+    r'\b(alle (daten|dateien) (löschen|vernichten)|kündigen|kündigung|abschalten)\b',
+    r'\b(irreversible|permanent(ly)? (delete|remove|shut down)|no going back)\b',
+    r'\b(burn the boats|no return|point of no return|all in)\b',
+]
+
+OPTIMISM_BIAS = [
+    r'\b(best case|im besten fall|wenn alles klappt|wenn alles läuft)\b',
+    r'\b(optimistic(ally)?|rosige aussichten|alles wird gut|wird schon klappen)\b',
+    r'\b(best.case scenario|if everything goes well|assuming all goes to plan)\b',
+]
+
+def check_pessimist(text: str, result: AnalysisResult):
+    sents = sentences(text)
+
+    # ── Kein Fallback-Plan ────────────────────────────────
+    has_fallback = any_match(FALLBACK_INDICATORS, text)
+    if not has_fallback:
+        detail = (
+            "Kein Plan B erkennbar. Das ist kein Pessimismus — das ist Mathematik: "
+            "Je mehr Schritte ein Plan hat, desto unwahrscheinlicher ist es, "
+            "dass alle reibungslos funktionieren. Was ist der Mindest-Fallback "
+            "für den wahrscheinlichsten Fehlerfall?"
+        )
+        result.add(Role.PESSIMIST, "Kein Fallback-Plan", detail)
+
+    # ── Fehlende Planungsdimensionen ──────────────────────
+    has_resource  = any_match(RESOURCE_WORDS, text)
+    has_time      = any_match(TIME_WORDS, text)
+    has_personnel = any_match(PERSONNEL_WORDS, text)
+    has_risk      = any_match(RISK_WORDS, text)
+
+    missing = []
+    if not has_resource:  missing.append("Budget / Ressourcen")
+    if not has_time:      missing.append("Zeitplan / Meilensteine")
+    if not has_personnel: missing.append("Verantwortliche Personen / Rollen")
+
+    if missing:
+        dimension_map = {
+            "Budget / Ressourcen":           "Ohne Ressourcenplanung ist jeder Plan ein Wunsch.",
+            "Zeitplan / Meilensteine":        "Ohne Zeitplan gibt es keinen Fortschritt, nur Aktivität.",
+            "Verantwortliche Personen / Rollen": "Ohne Rollen macht jeder alles — und niemand irgendetwas.",
+        }
+        reasons = " / ".join(dimension_map[m] for m in missing)
+        detail = (
+            f"Fehlende Dimensionen: {', '.join(missing)}. "
+            f"{reasons} "
+            f"Ein Plan der diese Fragen nicht beantwortet, ist kein Plan — "
+            f"es ist eine Idee."
+        )
+        result.add(Role.PESSIMIST, "Planungslücken", detail)
+
+    # ── Keine Risikobetrachtung ───────────────────────────
+    if not has_risk:
+        detail = (
+            "Keine Risiken erwähnt. Das bedeutet entweder, dass keine existieren "
+            "(unwahrscheinlich), oder dass sie nicht betrachtet wurden (gefährlich). "
+            "Was sind die drei größten Dinge, die diesen Plan zum Scheitern bringen könnten? "
+            "Diese drei Antworten gehören in den Plan."
+        )
+        result.add(Role.PESSIMIST, "Keine Risikoanalyse", detail)
+
+    # ── Single Point of Failure ───────────────────────────
+    for pattern in SINGLE_POINT_PATTERNS:
+        hits = find_matches(pattern, text)
+        if hits:
+            detail = (
+                f"'{hits[0]}' deutet auf einen Single Point of Failure hin — "
+                f"alles hängt an einer Person, einem System oder einer Entscheidung. "
+                f"Das ist kein Plan, das ist eine Lotterie. Was passiert konkret, "
+                f"wenn genau dieser Punkt wegfällt?"
+            )
+            result.add(Role.PESSIMIST, "Single Point of Failure", detail,
+                       first_sentence_with(text, pattern))
+            break
+
+    # ── Irreversible Schritte ohne Sicherheitsnetz ────────
+    irrev_hits = []
+    for p in IRREVERSIBLE_PATTERNS:
+        irrev_hits += find_matches(p, text)
+    if irrev_hits:
+        detail = (
+            f"Der Plan enthält irreversible Schritte ('{irrev_hits[0]}'). "
+            f"Maßnahmen, die nicht rückgängig zu machen sind, brauchen zwingend "
+            f"einen expliziten Bestätigungsschritt, eine Sicherungskopie oder "
+            f"eine Möglichkeit zur Wiederherstellung. Wurde das eingeplant?"
+        )
+        result.add(Role.PESSIMIST, "Irreversibler Schritt ohne Sicherung", detail,
+                   first_sentence_with(text, irrev_hits[0]))
+
+    # ── Reiner Optimismus-Bias ────────────────────────────
+    opt_hits = []
+    for p in OPTIMISM_BIAS:
+        opt_hits += find_matches(p, text)
+    if opt_hits and not has_risk:
+        detail = (
+            f"Der Plan denkt im Best-Case ('{opt_hits[0]}'), aber enthält keine "
+            f"Worst-Case-Überlegung. Pläne sollten auf dem wahrscheinlichsten Fall "
+            f"basieren, nicht auf dem besten. Was ist der realistische Fall, "
+            f"nicht der optimistische?"
+        )
+        result.add(Role.PESSIMIST, "Optimismus-Bias", detail,
+                   first_sentence_with(text, opt_hits[0]))
+
+    # ── Skalierungs-Risiko ────────────────────────────────
+    scale_trigger = [
+        r'\b(skalier|wachsen|expandieren|ausrollen|ausweiten|scale|grow|expand|roll out)\b',
+    ]
+    scale_concern = [
+        r'\b(infrastruktur|kapazität|server|personal|kosten|infrastructure|capacity|staff|cost)\b',
+    ]
+    if any_match(scale_trigger, text) and not any_match(scale_concern, text):
+        detail = (
+            "Wachstum oder Skalierung ist geplant, aber die dafür nötige Infrastruktur, "
+            "Kapazität oder der Personalaufbau werden nicht adressiert. "
+            "Was skaliert mit? Was wird zum Flaschenhals, wenn das Volumen steigt?"
+        )
+        result.add(Role.PESSIMIST, "Skalierungs-Risiko nicht adressiert", detail)
+
+
+# ───────────────────────────────────────────────────────
+# ⚖ DER LOGIKER — Widersprüche & Kausallücken
+# ───────────────────────────────────────────────────────
+
+# Paare die sich widersprechen können
+CONTRADICTION_PAIRS = [
+    (r'\b(schnell|sofort|umgehend|asap|immediately|quickly|fast|in kürzester zeit)\b',
+     r'\b(gründlich|sorgfältig|detailliert|thoroughly|carefully|in detail|high quality)\b',
+     "Geschwindigkeit und Sorgfalt sind ein klassischer Trade-off. "
+     "Beides gleichzeitig zu maximieren ist physikalisch kaum möglich — "
+     "was hat Priorität, wenn sie in Konflikt geraten?"),
+
+    (r'\b(kostenlos|gratis|kostenfrei|umsonst|free|no cost|zero cost|ohne gebühren)\b',
+     r'\b(hohe qualität|premium|best.in.class|erstklassig|excellent quality|top quality)\b',
+     "Kostenlos und hohe Qualität schließen sich fast immer aus — "
+     "irgendwer zahlt immer, sei es mit Zeit, Daten oder Qualitätsabstrichen."),
+
+    (r'\b(alle|jeden|jeder mensch|jede person|everyone|all users|all customers|the masses)\b',
+     r'\b(spezifisch|nische|zielgruppe|spezialisiert|niche|specific|targeted|focused)\b',
+     "Alle ansprechen und gleichzeitig spezialisiert sein ist der häufigste "
+     "strategische Widerspruch. Je breiter die Zielgruppe, desto schwächer die Positionierung."),
+
+    (r'\b(weniger (ressourcen|budget|personal|zeit)|kleineres team|reduziert(es)? budget)\b',
+     r'\b(mehr (output|ergebnis|leistung)|höhere qualität|schneller|besser|better results)\b',
+     "Weniger Input bei mehr Output — das ist nur möglich durch drastisch effizientere "
+     "Prozesse. Wurde konkret erklärt, wie das erreicht wird?"),
+
+    (r'\b(geheim|vertraulich|intern|nicht öffentlich|secret|confidential|internal only|private)\b',
+     r'\b(viral|öffentlich|alle|bekanntmachen|verbreiten|viral|public|share|spread|broadcast)\b',
+     "Vertraulichkeit und öffentliche Verbreitung schließen sich aus. "
+     "Was soll geheim bleiben, und was soll verbreitet werden?"),
+
+    (r'\b(dezentralisiert|autonom|selbstorganisiert|flat hierarchy|decentralized|autonomous)\b',
+     r'\b(zentrale kontrolle|strenge vorgaben|top.down|einheitlich|central control|strict)\b',
+     "Dezentralisierung und zentrale Kontrolle sind strukturell gegenläufig. "
+     "Welche Entscheidungen bleiben zentral, welche werden delegiert?"),
+
+    (r'\b(kurzfristig|sofort|diese woche|diesen monat|short.term|immediately|this week)\b',
+     r'\b(nachhaltig|langfristig|dauerhaft|nachhaltige|sustainable|long.term|permanent|lasting)\b',
+     "Kurzfristiger Druck und langfristige Nachhaltigkeit stehen strukturell im Konflikt — "
+     "was kurzfristig Ergebnisse bringt, schadet oft der Substanz."),
+
+    (r'\b(standardisiert|einheitlich|uniform|konsistent|standardized|uniform|consistent)\b',
+     r'\b(individuell|maßgeschneidert|personalisiert|flexibel|customized|personalized|flexible)\b',
+     "Standardisierung und individuelle Anpassung sind ein fundamentaler Trade-off. "
+     "Je mehr standardisiert wird, desto weniger Raum für Individualisierung — und umgekehrt."),
+
+    (r'\b(innovativ|neu|disruptiv|bahnbrechend|revolutionary|innovative|disruptive|novel)\b',
+     r'\b(bewährt|etabliert|erprobt|proven|established|tried and tested|conventional)\b',
+     "Innovation und bewährte Methoden haben entgegengesetzte Risikoprofile. "
+     "Bewährtes minimiert Risiko, Innovation maximiert Potenzial — was gilt hier?"),
+
+    (r'\b(vollständig|komplett|alles|hundert prozent|complete|fully|everything|100%|all-inclusive)\b',
+     r'\b(minimal|mvp|minimum viable|einfach halten|keep it simple|lean|lightweight|basic)\b',
+     "Vollständigkeit und 'minimal viable' widersprechen sich direkt. "
+     "Was ist wirklich das Minimum, das Wert liefert?"),
+
+    (r'\b(transparent|offen|öffentlich|einsehbar|transparent|open|public|visible)\b',
+     r'\b(wettbewerbsvorteil|geschäftsgeheimnis|proprietär|competitive advantage|trade secret)\b',
+     "Volle Transparenz und Wettbewerbsvorteile schließen sich oft aus — "
+     "was genau soll transparent sein, und was schützenswert?"),
+
+    (r'\b(perfekt|fehlerlos|null fehler|zero defect|perfect|flawless|error.free|zero tolerance)\b',
+     r'\b(schnell|agil|iterativ|fail fast|ship it|move fast|agile|iterative)\b',
+     "Perfektion und schnelle Iteration sind unvereinbar — "
+     "Qualität braucht Zeit, Geschwindigkeit erfordert Kompromisse."),
+]
+
+CAUSAL_GAPS = [
+    (r'\b(dann|danach|anschließend|therefore|then|after that|subsequently)\b',
+     "Kausale Sprünge zwischen Schritten ohne erklärten Mechanismus."),
+]
+
+CIRCULAR_INDICATORS = [
+    (r'\b(weil|da|denn|because|since|as)\b',
+     r'\b(offensichtlich|selbstverständlich|natürlich|obviously|clearly|of course)\b',
+     "Eine Begründung die auf 'offensichtlich' oder 'natürlich' basiert, "
+     "ist keine echte Begründung — es ist eine Wiederholung der Behauptung."),
+    (r'\b(gut (ist|wäre)|besser (ist|wäre)|good (is|would be)|better (is|would be))\b',
+     r'\b(weil es gut|because it.s good|because it.s better|weil es besser)\b',
+     "Zirkelschluss-Muster: X ist gut, weil es gut ist."),
+]
+
+SCOPE_CREEP_PATTERNS = [
+    r'\b(und außerdem|zusätzlich (auch|noch)|darüber hinaus (auch|noch))\b',
+    r'\b(und auch noch|on top of that|additionally also|furthermore also|and also)\b',
+    r'\b(nebenbei|nebenher|als neben(produkt|effekt)|as a side effect|as a byproduct)\b',
+    r'\b(plus dazu|obendrauf|bonus|on top|extra|additionally)\b',
+]
+
+MISSING_MECHANISM = [
+    # "Wir machen X → daraus folgt Y" ohne erklärten Mechanismus
+    (r'\b(führt zu|führt automatisch|results in|leads to|will result in|will lead to)\b',
+     r'\b(weil|durch|via|mittels|indem|by|through|via|by means of|because)\b',
+     "Der Plan behauptet einen Kausalzusammenhang ohne den Mechanismus zu erklären: "
+     "Warum genau führt A zu B? Welche Schritte liegen dazwischen?"),
+]
+
+FALSE_DILEMMA_PATTERNS = [
+    r'\b(entweder .{0,30} oder|nur zwei möglichkeiten|keine andere wahl|keine alternative)\b',
+    r'\b(either .{0,30} or|only two options|no other choice|no alternative|binary choice)\b',
+]
+
+def check_logician(text: str, result: AnalysisResult):
+    sents = sentences(text)
+
+    # ── Widerspruchspaare ─────────────────────────────────
+    for pat_a, pat_b, desc in CONTRADICTION_PAIRS:
+        hits_a = find_matches(pat_a, text)
+        hits_b = find_matches(pat_b, text)
+        if hits_a and hits_b:
+            detail = (
+                f"'{hits_a[0]}' und '{hits_b[0]}' stehen im Konflikt: {desc}"
+            )
+            result.add(Role.LOGICIAN, "Interner Widerspruch", detail,
+                       first_sentence_with(text, pat_a))
+
+    # ── Kausallücken ──────────────────────────────────────
+    consequence_pat = re.compile(
+        r'\b(dann|deshalb|daher|folglich|deswegen|therefore|thus|hence|so|consequently|as a result)\b',
+        re.IGNORECASE
+    )
+    reason_pat = re.compile(
+        r'\b(weil|da|denn|durch|mittels|indem|because|since|by|through|via|by means of)\b',
+        re.IGNORECASE
+    )
+    causal_sents = [s for s in sents if consequence_pat.search(s)]
+    has_reason   = any(reason_pat.search(s) for s in sents)
+    if causal_sents and not has_reason:
+        detail = (
+            f"Der Plan zieht Schlussfolgerungen — '{causal_sents[0][:60]}…' — "
+            f"ohne zu erklären durch welchen Mechanismus das eintritt. "
+            f"'Dann' ist kein Argument, es ist eine Hoffnung. "
+            f"Was genau bewirkt den Übergang von A nach B?"
+        )
+        result.add(Role.LOGICIAN, "Kausallücke", detail,
+                   causal_sents[0][:100] if causal_sents else "")
+
+    # ── Zirkelschlüsse ────────────────────────────────────
+    for pat_a, pat_b, desc in CIRCULAR_INDICATORS:
+        if find_matches(pat_a, text) and find_matches(pat_b, text):
+            result.add(Role.LOGICIAN, "Möglicher Zirkelschluss", desc)
+
+    # ── Scope Creep ───────────────────────────────────────
+    scope_hits = count_matches(SCOPE_CREEP_PATTERNS, text)
+    if scope_hits >= 2:
+        detail = (
+            f"Der Plan häuft Ziele auf ({scope_hits} additive Erweiterungen). "
+            f"Scope Creep ist keine böse Absicht — er entsteht dadurch, "
+            f"dass gute Ideen nicht priorisiert werden. "
+            f"Was ist das eine Kernziel? Alles andere ist Ablenkung bis das erreicht ist."
+        )
+        result.add(Role.LOGICIAN, "Scope Creep", detail)
+
+    # ── Fehlender Mechanismus ─────────────────────────────
+    for pat_a, pat_b, desc in MISSING_MECHANISM:
+        if find_matches(pat_a, text) and not find_matches(pat_b, text):
+            result.add(Role.LOGICIAN, "Fehlender Mechanismus", desc,
+                       first_sentence_with(text, pat_a))
+            break
+
+    # ── Falsches Dilemma ──────────────────────────────────
+    fd_hits = []
+    for p in FALSE_DILEMMA_PATTERNS:
+        fd_hits += find_matches(p, text)
+    if fd_hits:
+        detail = (
+            f"Der Plan stellt eine Entweder-oder-Wahl auf ('{fd_hits[0]}'). "
+            f"Echte Dilemmata sind selten — meistens gibt es einen dritten Weg, "
+            f"der nicht betrachtet wurde. Welche Optionen wurden ausgeschlossen?"
+        )
+        result.add(Role.LOGICIAN, "Falsches Dilemma", detail,
+                   first_sentence_with(text, fd_hits[0]))
+
+    # ── Überlappende Verantwortlichkeiten ─────────────────
+    overlap_pat = re.compile(
+        r'\b(beide|alle|wir alle|gemeinsam|zusammen|everyone|all of us|jointly|collectively)\s+'
+        r'.{0,20}\s*(verantwortlich|zuständig|responsible|in charge|accountable)\b',
+        re.IGNORECASE
+    )
+    if overlap_pat.search(text):
+        detail = (
+            "Wenn alle verantwortlich sind, ist niemand verantwortlich. "
+            "Geteilte Verantwortung ohne klare Rollenverteilung führt dazu, "
+            "dass jeder davon ausgeht, jemand anderes kümmert sich. "
+            "Wer hat das letzte Wort — eine Person, eine Stimme?"
+        )
+        result.add(Role.LOGICIAN, "Diffuse Verantwortung", detail)
+
+    # ── Zeitliche Inkonsistenz ────────────────────────────
+    past_tense  = re.compile(r'\b(haben|hatte|war|wurde|has|had|was|were|did)\b', re.IGNORECASE)
+    future_tense = re.compile(r'\b(wird|werden|soll|wollen|will|shall|going to)\b', re.IGNORECASE)
+    present_tense = re.compile(r'\b(ist|sind|machen|tun|is|are|do|does|currently)\b', re.IGNORECASE)
+    tenses = sum([
+        bool(past_tense.search(text)),
+        bool(future_tense.search(text)),
+        bool(present_tense.search(text))
+    ])
+    if tenses == 3 and len(sents) > 3:
+        # Nur melden wenn mehrere Zeiten durcheinander im gleichen Plan
+        past_sents   = [s for s in sents if past_tense.search(s)]
+        future_sents = [s for s in sents if future_tense.search(s)]
+        if past_sents and future_sents:
+            detail = (
+                "Der Plan wechselt zwischen Vergangenheits-, Gegenwarts- und Zukunftsform. "
+                "Das kann auf unklare Zeitlinien hinweisen: Was ist bereits passiert, "
+                "was ist geplant, und was passiert gerade? Eine klare Zeitstruktur "
+                "macht den Plan deutlich greifbarer."
+            )
+            result.add(Role.LOGICIAN, "Zeitliche Unklarheit", detail)
+
+
+# ───────────────────────────────────────────────────────
+# 🃏 DER NARR — Übersehenes Offensichtliches
+# ───────────────────────────────────────────────────────
+
+FORGOTTEN_BASICS = [
+    # (Trigger-Pattern, Gegenbeweis-Pattern, Beschreibung)
+    (r'\b(app|software|system|plattform|website|tool|application|platform|digitale lösung)\b',
+     r'\b(user|nutzer|benutzer|kunde|client|zielgruppe|target|endanwender|ux|usability)\b',
+     "Technologie geplant, aber die Nutzerperspektive fehlt. "
+     "Technologie ist kein Selbstzweck — wer sind die Menschen, die das benutzen werden, "
+     "und wurden ihre Bedürfnisse tatsächlich verstanden?"),
+
+    (r'\b(produkt|product|service|dienstleistung|angebot|lösung)\b',
+     r'\b(preis|price|kosten|cost|bezahlen|pay|monetar|revenue|einnahmen|geschäftsmodell|business model)\b',
+     "Es gibt ein Produkt oder Service, aber kein Erlösmodell. "
+     "Wie wird damit Geld verdient, wer zahlt, wie viel, und warum?"),
+
+    (r'\b(team|mitarbeiter|personal|staff|employees|people|kollegen|colleagues)\b',
+     r'\b(motivation|anreiz|incentive|gehalt|salary|kompensation|compensation|benefit|kultur|culture)\b',
+     "Menschen werden als Ressource eingeplant, aber nicht als Menschen. "
+     "Was hält das Team motiviert, besonders wenn es schwierig wird?"),
+
+    (r'\b(wachstum|skalier|expand|scale|grow|wachsen|ausrollen|rollout)\b',
+     r'\b(infrastruktur|kapazität|infrastructure|capacity|ressourcen|resources|personal|staff)\b',
+     "Wachstum ist geplant, aber nicht was mitskalieren muss. "
+     "Wachstum bedeutet mehr von allem — mehr Support, mehr Infrastruktur, "
+     "mehr Koordination. Was ist der Engpass beim 10x-Szenario?"),
+
+    (r'\b(sicherheit|security|datenschutz|privacy|daten|data|nutzerdaten|user data)\b',
+     r'\b(backup|verschlüssel|encrypt|audit|compliance|gdpr|dsgvo|schutz|protection|access control)\b',
+     "Daten oder Sicherheit werden erwähnt, aber konkrete Schutzmaßnahmen fehlen. "
+     "Was passiert bei einem Datenleck? Wer hat Zugriff auf was?"),
+
+    (r'\b(kommunikation|communication|marketing|werbung|advertising|sichtbarkeit|visibility)\b',
+     r'\b(kanal|channel|medium|plattform|platform|reichweite|reach|zielgruppe|audience)\b',
+     "Kommunikation ist geplant, aber nicht wo und wie sie die Zielgruppe erreicht. "
+     "Über welche Kanäle genau, und warum diese?"),
+
+    (r'\b(rechtlich|legal|gesetz|law|vertrag|contract|lizenz|license|regulier)\b',
+     r'\b(anwalt|lawyer|prüfung|review|genehmigung|approval|behörde|authority|compliance)\b',
+     "Rechtliche Aspekte tauchen auf, aber eine juristische Prüfung fehlt. "
+     "Rechtsfehler sind oft die teuersten — wurde das von jemandem mit Fachkenntnis geprüft?"),
+
+    (r'\b(konkurrent|wettbewerb|competitor|competition|markt|market|mitbewerber)\b',
+     r'\b(differenzierung|alleinstellungsmerkmal|usp|unique|unterschied|advantage|edge|besser als)\b',
+     "Wettbewerb wird erwähnt, aber kein klares Differenzierungsmerkmal. "
+     "Warum sollte jemand dieses Angebot wählen statt das des Konkurrenten?"),
+
+    (r'\b(launch|release|veröffentlich|go.live|rollout|ausliefern|deploy|auf den markt)\b',
+     r'\b(test|pilot|beta|feedback|iteration|qa|quality assurance|review|validier)\b',
+     "Ein Launch ist geplant, aber keine Testphase davor. "
+     "Ohne Feedback vor dem Start wird das Publikum zum unfreiwilligen Beta-Tester."),
+
+    (r'\b(automatisier|automatisch|automat|automation|auto|selbstständig|selbstautomat)\b',
+     r'\b(fehler|error|exception|fallback|manuell|manual|override|eingriff|intervention)\b',
+     "Automatisierung ist geplant, aber was passiert wenn die Automatisierung versagt? "
+     "Jede Automatisierung braucht einen manuellen Override für den Fehlerfall."),
+
+    (r'\b(partnerschaft|kooperation|zusammenarbeit|partnership|collaboration|joint venture)\b',
+     r'\b(vertrag|contract|vereinbarung|agreement|sla|erwartungen|expectations|exit)\b',
+     "Eine Partnerschaft ist geplant, aber kein formaler Rahmen. "
+     "Auf was genau haben sich beide Seiten geeinigt, und was passiert wenn die Partnerschaft endet?"),
+
+    (r'\b(feedback|bewertung|review|evaluation|meinung|opinion|user research)\b',
+     r'\b(änderung|anpassung|iteration|update|reagieren|respond|einbauen|incorporate)\b',
+     "Feedback wird gesammelt, aber es ist unklar was damit passiert. "
+     "Feedback ohne Prozess zur Verarbeitung ist nur Lärm — wie wird es priorisiert und eingebaut?"),
+]
+
+VAGUE_TERMS = [
+    r'\b(irgendwie|irgendwann|bald|demnächst|irgendwo|irgendwer|irgendwas)\b',
+    r'\b(somehow|sometime|soon|eventually|later|somewhere|someone|something vague)\b',
+    r'\b(vielleicht|möglicherweise|eventuell|unter umständen|gegebenenfalls)\b',
+    r'\b(maybe|perhaps|possibly|might|could potentially|if all goes well)\b',
+    r'\b(ein bisschen|etwas mehr|ein wenig|a bit|somewhat|a little|slightly|kind of|sort of)\b',
+    r'\b(relativ|ziemlich|recht|fairly|quite|rather|pretty much|more or less)\b',
+]
+
+BUZZWORD_PATTERNS = [
+    r'\b(synerg|leverage|paradigm|disrupt|pivot|agil|agile|innovativ|ecosystem|holistic)\b',
+    r'\b(deep dive|drill down|move the needle|low.hanging fruit|best practice|thought leader)\b',
+    r'\b(skalierbar|skalierbare lösung|game changer|win.win|value add|value proposition)\b',
+    r'\b(blockchain|ki|ai|machine learning|big data|cloud.native|digital transformation)\b',
+]
+
+FORGOTTEN_QUESTIONS = [
+    # (Kontext-Pattern, fehlende Frage, Beschreibung)
+    (r'\b(neu|neue|neues|new|launch|start|gründ|found)\b',
+     r'\b(warum wir|warum jetzt|why us|why now|unfair advantage|unique insight)\b',
+     "Warum genau dieses Team, warum genau jetzt? "
+     "Der Zeitpunkt und die spezifische Eignung des Teams sind oft entscheidender "
+     "als die Idee selbst."),
+
+    (r'\b(kunde|kunden|nutzer|user|consumer|client|zielgruppe|target)\b',
+     r'\b(gesprochen|interview|befragt|researched|tested with|validated with|feedback von)\b',
+     "Es wird über Kunden oder Nutzer gesprochen, aber wurden sie tatsächlich befragt? "
+     "Annahmen über Nutzerbedürfnisse ohne Nutzerforschung sind reine Spekulation."),
+]
+
+def check_fool(text: str, result: AnalysisResult):
+    sents = sentences(text)
+    wc = word_count(text)
+
+    # ── Fehlende Basics ───────────────────────────────────
+    for trigger, missing_pat, desc in FORGOTTEN_BASICS:
+        has_trigger = bool(find_matches(trigger, text))
+        has_answer  = bool(find_matches(missing_pat, text))
+        if has_trigger and not has_answer:
+            result.add(
+                Role.FOOL, "Vergessenes Offensichtliches", desc,
+                first_sentence_with(text, trigger)
+            )
+
+    # ── Vage Sprache ──────────────────────────────────────
+    vague_hits = []
+    for p in VAGUE_TERMS:
+        vague_hits += find_matches(p, text)
+    if len(vague_hits) >= 2:
+        examples = ", ".join(f"'{h}'" for h in dict.fromkeys(vague_hits)[:4])
+        detail = (
+            f"Der Plan verwendet {len(vague_hits)} vage Formulierungen: {examples}. "
+            f"Vagheit ist kein Stil — sie ist ein Zeichen dafür, dass etwas noch nicht "
+            f"durchgedacht wurde. Was genau steckt hinter diesen Wörtern?"
+        )
+        result.add(Role.FOOL, "Zu vage Formulierungen", detail)
+
+    # ── Buzzword-Dichte ───────────────────────────────────
+    buzz_hits = []
+    for p in BUZZWORD_PATTERNS:
+        buzz_hits += find_matches(p, text)
+    if len(buzz_hits) >= 3:
+        examples = ", ".join(f"'{h}'" for h in dict.fromkeys(buzz_hits)[:4])
+        detail = (
+            f"Hohe Buzzword-Dichte: {examples}. "
+            f"Buzzwords sind oft Platzhalter für Konzepte, die noch nicht konkret gedacht wurden. "
+            f"Was bedeuten diese Begriffe im konkreten Kontext dieses Plans, "
+            f"und wie genau werden sie umgesetzt?"
+        )
+        result.add(Role.FOOL, "Buzzword-Überladung", detail)
+
+    # ── Zu wenig ausgearbeitet ────────────────────────────
+    if wc < 50:
+        detail = (
+            f"Der Text hat nur {wc} Wörter — das ist ein Stichwort, kein Plan. "
+            f"Ein Plan ist ausgearbeitet genug, wenn jemand der nicht dabei war "
+            f"ihn lesen und selbstständig umsetzen könnte. "
+            f"Was fehlt: Kontext, Schritte, Verantwortlichkeiten, Zeitplan?"
+        )
+        result.add(Role.FOOL, "Plan zu wenig ausgearbeitet", detail)
+
+    # ── Keine Erfolgsdefinition ───────────────────────────
+    success_patterns = [
+        r'\b(erfolgreich|ziel erreicht|abgeschlossen|fertiggestellt|abgenommen)\b',
+        r'\b(successful|completed|done|finished|achieved|delivered|signed off)\b',
+        r'\b(definition of done|akzeptanzkriterien|acceptance criteria|done criteria)\b',
+    ]
+    if not any_match(success_patterns, text):
+        detail = (
+            "Der Plan definiert nicht, wann er abgeschlossen ist. "
+            "Ohne Erfolgskriterium gibt es kein Ziel, keine Energie und kein Ende — "
+            "der Plan läuft ewig weiter oder stirbt ohne Abschluss. "
+            "Was ist der konkrete Zustand, bei dem alle sagen: 'Das ist geschafft'?"
+        )
+        result.add(Role.FOOL, "Kein Erfolgskriterium", detail)
+
+    # ── Vergessene Grundfragen ────────────────────────────
+    for trigger, missing_pat, desc in FORGOTTEN_QUESTIONS:
+        if find_matches(trigger, text) and not find_matches(missing_pat, text):
+            result.add(
+                Role.FOOL, "Unbeantwortete Grundfrage", desc,
+                first_sentence_with(text, trigger)
+            )
+
+    # ── Exit-Strategie ────────────────────────────────────
+    long_term = [
+        r'\b(langfristig|dauerhaft|für immer|permanent|long.term|permanently|forever|ongoing)\b',
+    ]
+    exit_pat = [
+        r'\b(exit|ausstieg|beenden|abwickeln|end|wind down|sunset|discontinue|sell|verkaufen)\b',
+    ]
+    if any_match(long_term, text) and not any_match(exit_pat, text):
+        detail = (
+            "Der Plan ist auf Dauerhaftigkeit ausgelegt, aber enthält keine Exit-Überlegung. "
+            "Was passiert, wenn das Projekt eingestellt werden muss, "
+            "jemand aussteigt, oder die Umstände sich radikal ändern?"
+        )
+        result.add(Role.FOOL, "Keine Exit-Strategie", detail)
+
+
+# ═══════════════════════════════════════════════════════
+#  HAUPT-ANALYSE
+# ═══════════════════════════════════════════════════════
+
+def analyze(text: str) -> AnalysisResult:
+    result = AnalysisResult()
+    check_doubter(text, result)
+    check_pessimist(text, result)
+    check_logician(text, result)
+    check_fool(text, result)
+    dedupe_findings(result)
+    return result
+
+
+# ═══════════════════════════════════════════════════════
+#  AUSGABE
+# ═══════════════════════════════════════════════════════
+
+WRAP_WIDTH = 68
+
+def print_banner():
+    print(c(Col.CYAN + Col.BOLD,
+        "\n╔════════════════════════════════════════════╗"
+        "\n║          D A S  M O U R N I V A L          ║"
+        "\n║      Der Kritikerrat — Plan-Analyse        ║"
+        "\n╚════════════════════════════════════════════╝"))
+    print(c(Col.DIM,
+        "  🗡 Der Zweifler  🛡 Der Pessimist  "
+        "⚖ Der Logiker  🃏 Der Narr\n"))
+    print(c(Col.DIM,
+        "  Eingabe: Text eingeben, dann ZWEIMAL Enter.\n"
+        "  Befehle: 'hilfe'  'neu'  'quit'\n"))
+
+def print_help():
+    print(c(Col.CYAN, "\n── Hilfe ────────────────────────────────────────────"))
+    print("  Schreib deinen Plan oder deine Aussage in das Terminal.")
+    print("  Drücke dann ZWEIMAL Enter — die Analyse startet.")
+    print()
+    print("  Befehle:")
+    print("    hilfe / help  — Diese Hilfe")
+    print("    neu / new     — Neue Analyse (Bildschirm leeren)")
+    print("    quit / exit   — Beenden")
+    print()
+    print("  Tipp: Pipes funktionieren auch:")
+    print("    cat plan.txt | python3 mournival.py")
+    print(c(Col.CYAN, "─────────────────────────────────────────────────────\n"))
+
+def wrap(text: str, indent: int = 6) -> str:
+    pad = " " * indent
+    return textwrap.fill(text, width=WRAP_WIDTH,
+                         initial_indent=pad,
+                         subsequent_indent=pad)
+
+def print_findings(result: AnalysisResult):
+    if not result.findings:
+        print(c(Col.GREEN, "\n  ✓ Keine Schwachstellen gefunden. Der Plan wirkt solide.\n"))
+        return
+
+    total = len(result.findings)
+    print(c(Col.BOLD, f"\n  ═══ {total} Schwachstelle(n) gefunden ═══\n"))
+
+    for role in Role:
+        findings = result.by_role(role)
+        if not findings:
+            continue
+
+        header = c(role.color + Col.BOLD,
+                   f"  {role.icon}  {role.label}  ({len(findings)})")
+        print(header)
+        print(c(Col.DIM, "  " + "─" * 50))
+
+        for i, f in enumerate(findings, 1):
+            print(c(Col.BOLD, f"\n  [{i}] {f.title}"))
+            print(wrap(f.detail))
+            if f.excerpt:
+                excerpt = f.excerpt[:100].strip()
+                print(c(Col.DIM, wrap(f'→ "{excerpt}…"' if len(f.excerpt) > 100
+                                       else f'→ "{excerpt}"')))
+        print()
+
+def print_summary(result: AnalysisResult):
+    if not result.findings:
+        return
+    counts = {role: len(result.by_role(role)) for role in Role}
+    parts = [c(role.color, f"{role.icon} {n}") for role, n in counts.items() if n > 0]
+    print(c(Col.DIM, "  Zusammenfassung: ") + "  ".join(parts) + "\n")
+
+
+# ═══════════════════════════════════════════════════════
+#  REPL
+# ═══════════════════════════════════════════════════════
+
+def read_multiline(prompt: str) -> str:
+    print(c(Col.CYAN, prompt), end="", flush=True)
+    lines = []
+    try:
+        while True:
+            line = input()
+            if line.strip() == "" and lines:
+                break
+            lines.append(line)
+    except EOFError:
+        pass
+    return "\n".join(lines)
+
+def repl():
+    print_banner()
+    while True:
+        try:
+            raw = read_multiline(
+                "┌─ Plan / Aussage eingeben (Leerzeile zum Analysieren):\n└▶ "
+            )
+        except KeyboardInterrupt:
+            print(c(Col.DIM, "\n  [Strg+C] — 'quit' zum Beenden"))
+            continue
+
+        cmd = raw.strip().lower()
+
+        if cmd in ("quit", "exit", "q", "bye"):
+            print(c(Col.DIM, "\n  Möge dein Plan gelingen.\n"))
+            sys.exit(0)
+        elif cmd in ("hilfe", "help", "h", "?"):
+            print_help()
+            continue
+        elif cmd in ("neu", "new", "clear"):
+            print("\033[2J\033[H", end="")
+            print_banner()
+            continue
+        elif not cmd:
+            continue
+
+        result = analyze(raw)
+        print_findings(result)
+        print_summary(result)
+
+
+# ═══════════════════════════════════════════════════════
+#  PIPE-MODUS
+# ═══════════════════════════════════════════════════════
+
+def pipe_mode():
+    text = sys.stdin.read().strip()
+    if not text:
+        print("Fehler: Kein Text empfangen.", file=sys.stderr)
+        sys.exit(1)
+    result = analyze(text)
+    print_findings(result)
+    print_summary(result)
+
+
+# ═══════════════════════════════════════════════════════
+#  DISKUSSIONS-MODUS  (--dis)
+# ═══════════════════════════════════════════════════════
+
+# Wie jede Rolle auf Kritiken anderer Rollen reagiert:
+# (angreifende Rolle, verteidigende Rolle) -> Reaktionsmuster
+_REACTIONS: dict[tuple[Role, Role], list[str]] = {
+    (Role.DOUBTER,   Role.PESSIMIST): [
+        "Das greife ich auf: Annahmen sind eine Sache — aber selbst wenn die Annahmen stimmen, "
+        "fehlt ein konkreter Notfallplan. Was passiert, wenn das Fundament hält, der Aufbau aber bricht?",
+    ],
+    (Role.DOUBTER,   Role.LOGICIAN): [
+        "Hier sehe ich eine Verbindung: Ungeprüfte Annahmen erzeugen oft die logischen Lücken, "
+        "auf die ich hingewiesen habe. Wer auf wackeligen Prämissen aufbaut, kann keine widerspruchsfreie Argumentation führen.",
+    ],
+    (Role.DOUBTER,   Role.FOOL): [
+        "Gut bemerkt — aber ich gehe weiter: Nicht nur die naheliegenden Fragen wurden übersehen, "
+        "sondern bereits die Grundannahmen wurden nie laut ausgesprochen. Das Offensichtliche beginnt mit den Prämissen.",
+    ],
+    (Role.PESSIMIST, Role.DOUBTER): [
+        "Ich ergänze: Selbst wenn man die Annahmen hinterfragt, hilft das wenig, "
+        "wenn kein Absicherungsplan existiert. Zweifel ohne Fallback ist nur halbe Arbeit.",
+    ],
+    (Role.PESSIMIST, Role.LOGICIAN): [
+        "Logische Konsistenz schützt nicht vor dem Schlimmsten. "
+        "Ein wasserdichtes Argument bringt nichts, wenn das Projekt beim ersten echten Rückschlag kollabiert.",
+    ],
+    (Role.PESSIMIST, Role.FOOL): [
+        "Die übersehenen Grundfragen und die fehlenden Absicherungen hängen zusammen: "
+        "Wer nicht fragt 'Was wenn es schiefgeht?', übersieht genau das Offensichtlichste.",
+    ],
+    (Role.LOGICIAN,  Role.DOUBTER): [
+        "Die Annahmen sind ein Problem — aber ich sehe dahinter eine tiefere Struktur: "
+        "Die Argumentation hat Lücken, die durch keine noch so gute Prämisse gefüllt werden können.",
+    ],
+    (Role.LOGICIAN,  Role.PESSIMIST): [
+        "Risiko-Absicherung ist wichtig, aber sie nützt nichts, wenn die Logik des Plans selbst fehlerhaft ist. "
+        "Man kann einen Widerspruch nicht durch einen Notfallplan reparieren.",
+    ],
+    (Role.LOGICIAN,  Role.FOOL): [
+        "Interessant — das Offensichtliche wurde übersehen, und genau dort verbergen sich oft "
+        "die größten logischen Widersprüche. Einfache Fragen decken komplexe Inkonsistenzen auf.",
+    ],
+    (Role.FOOL,      Role.DOUBTER): [
+        "Ich sage es einfacher: Bevor man Annahmen hinterfragt, sollte man die simpelste Frage stellen — "
+        "Weiß überhaupt jemand, warum das gemacht wird?",
+    ],
+    (Role.FOOL,      Role.PESSIMIST): [
+        "Notfallpläne sind schön. Aber manchmal ist der echte Notfall, "
+        "dass niemand erklärt hat, was Erfolg überhaupt bedeutet.",
+    ],
+    (Role.FOOL,      Role.LOGICIAN): [
+        "Logik ist das Werkzeug — aber wenn die Grundfragen fehlen, "
+        "ist selbst die sauberste Logik am falschen Ort angewendet.",
+    ],
+}
+
+def _opening_statement(role: Role, findings: list[Finding]) -> str:
+    """Eröffnungsstatement einer Rolle, basierend auf ihren eigenen Findings."""
+    titles = [f.title for f in findings[:2]]
+    joined = " und ".join(f'„{t}"' for t in titles)
+    intros = {
+        Role.DOUBTER:   f"Ich stelle zunächst die Annahmen in Frage. Meine Kernpunkte: {joined}.",
+        Role.PESSIMIST: f"Ich schaue auf die Absicherung. Was mich besorgt: {joined}.",
+        Role.LOGICIAN:  f"Ich prüfe die innere Logik. Meine Beobachtungen: {joined}.",
+        Role.FOOL:      f"Ich frage das Offensichtliche. Was hier fehlt: {joined}.",
+    }
+    return intros[role]
+
+def print_discussion(result: AnalysisResult):
+    """Druckt eine strukturierte Diskussion zwischen den Rollen."""
+    active_roles = [r for r in Role if result.by_role(r)]
+
+    if not active_roles:
+        print(c(Col.GREEN, "\n  ✓ Keine Schwachstellen — kein Diskussionsbedarf.\n"))
+        return
+
+    print(c(Col.CYAN + Col.BOLD,
+        "\n╔════════════════════════════════════════════╗"
+        "\n║     D I S K U S S I O N S R U N D E       ║"
+        "\n╚════════════════════════════════════════════╝\n"))
+
+    # Runde 1: Eröffnungsstatements
+    print(c(Col.BOLD, "  ── Runde 1: Eröffnungsstatements ─────────────────\n"))
+    for role in active_roles:
+        findings = result.by_role(role)
+        stmt = _opening_statement(role, findings)
+        header = c(role.color + Col.BOLD, f"  {role.icon}  {role.label}:")
+        print(header)
+        print(wrap(stmt))
+        print()
+
+    # Runde 2: Reaktionen untereinander
+    print(c(Col.BOLD, "  ── Runde 2: Reaktionen ────────────────────────────\n"))
+    for speaker in active_roles:
+        for listener in active_roles:
+            if speaker is listener:
+                continue
+            key = (speaker, listener)
+            if key in _REACTIONS:
+                reaction = _REACTIONS[key][0]
+                header = c(speaker.color + Col.BOLD,
+                           f"  {speaker.icon}  {speaker.label}")
+                sub    = c(Col.DIM, f" → an {listener.icon} {listener.label}:")
+                print(header + sub)
+                print(wrap(reaction))
+                print()
+
+    # Runde 3: Gemeinsames Fazit
+    print(c(Col.BOLD, "  ── Runde 3: Gemeinsames Fazit ─────────────────────\n"))
+    count = len(result.findings)
+    role_parts = "  ".join(
+        c(r.color, f"{r.icon} {len(result.by_role(r))}")
+        for r in active_roles
+    )
+    top_titles = ", ".join(f.title for f in result.findings[:3])
+    print(wrap(
+        f"Der Rat ist sich einig: Mit {count} identifizierten Schwachstellen "
+        f"({', '.join(r.label for r in active_roles)}) sollte der Plan überarbeitet werden, "
+        f"bevor er in die Umsetzung geht. Die drängendsten Punkte: {top_titles}."
+    ))
+    print()
+    print(c(Col.DIM, "  Einzelbefunde: ") + role_parts + "\n")
+    print(c(Col.DIM,
+        "  Tipp: Ohne --dis siehst du die vollständigen Einzelbefunde.\n"))
+
+
+def print_dis_hint():
+    """Kleiner Hinweis am Ende einer normalen Analyse."""
+    print(c(Col.DIM,
+        "  💬 Tipp: Mit --dis lassen die Rollen ihre Kritiken aufeinandertreffen.\n"))
+
+
+def repl_dis():
+    """REPL im Diskussions-Modus."""
+    print_banner()
+    print(c(Col.MAGENTA + Col.BOLD, "  Modus: Diskussion (--dis)\n"))
+    while True:
+        try:
+            raw = read_multiline(
+                "┌─ Plan / Aussage eingeben (Leerzeile zum Analysieren):\n└▶ "
+            )
+        except KeyboardInterrupt:
+            print(c(Col.DIM, "\n  [Strg+C] — 'quit' zum Beenden"))
+            continue
+
+        cmd = raw.strip().lower()
+
+        if cmd in ("quit", "exit", "q", "bye"):
+            print(c(Col.DIM, "\n  Möge dein Plan gelingen.\n"))
+            sys.exit(0)
+        elif cmd in ("hilfe", "help", "h", "?"):
+            print_help()
+            continue
+        elif cmd in ("neu", "new", "clear"):
+            print("\033[2J\033[H", end="")
+            print_banner()
+            print(c(Col.MAGENTA + Col.BOLD, "  Modus: Diskussion (--dis)\n"))
+            continue
+        elif not cmd:
+            continue
+
+        result = analyze(raw)
+        print_discussion(result)
+
+
+# ═══════════════════════════════════════════════════════
+#  ENTRY POINT
+# ═══════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(
+        prog="mournival",
+        description="Der Kritikerrat — Plan-Analyse",
+        add_help=True,
+    )
+    parser.add_argument(
+        "--dis",
+        action="store_true",
+        help="Diskussionsmodus: Die Rollen reagieren aufeinander.",
+    )
+    args, _ = parser.parse_known_args()
+
+    if not sys.stdin.isatty():
+        # Pipe-Modus: --dis funktioniert auch per Pipe
+        text = sys.stdin.read().strip()
+        if not text:
+            print("Fehler: Kein Text empfangen.", file=sys.stderr)
+            sys.exit(1)
+        result = analyze(text)
+        if args.dis:
+            print_discussion(result)
+        else:
+            print_findings(result)
+            print_summary(result)
+            print_dis_hint()
+    else:
+        if args.dis:
+            repl_dis()
+        else:
+            # Normaler REPL — Hinweis nach jeder Analyse
+            _orig_repl = repl
+
+            def repl_with_hint():
+                print_banner()
+                while True:
+                    try:
+                        raw = read_multiline(
+                            "┌─ Plan / Aussage eingeben (Leerzeile zum Analysieren):\n└▶ "
+                        )
+                    except KeyboardInterrupt:
+                        print(c(Col.DIM, "\n  [Strg+C] — 'quit' zum Beenden"))
+                        continue
+                    cmd = raw.strip().lower()
+                    if cmd in ("quit", "exit", "q", "bye"):
+                        print(c(Col.DIM, "\n  Möge dein Plan gelingen.\n"))
+                        sys.exit(0)
+                    elif cmd in ("hilfe", "help", "h", "?"):
+                        print_help()
+                        continue
+                    elif cmd in ("neu", "new", "clear"):
+                        print("\033[2J\033[H", end="")
+                        print_banner()
+                        continue
+                    elif not cmd:
+                        continue
+                    result = analyze(raw)
+                    print_findings(result)
+                    print_summary(result)
+                    print_dis_hint()
+
+            repl_with_hint()

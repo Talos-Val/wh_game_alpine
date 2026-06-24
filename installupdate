@@ -2,7 +2,7 @@
 import os
 
 # Die URL zu deinem Installer-Skript auf GitHub
-URL = "https://raw.githubusercontent.com/Talos-Val/linux_tools/refs/heads/main/installer"
+URL = "https://raw.githubusercontent.com/Talos-Val/linux_tools/main/installer"
 TARGET = "/usr/local/bin/installer"
 
 def installupdate():

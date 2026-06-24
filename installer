@@ -26,7 +26,7 @@ TOOLS = {
     "terminal-beep": "Wandelt Text in Morse-Code um.",
     "wh-alpine": "Das Warhammer-Hauptspiel.",
     "worm-race": "Ein Wurmrennen.",
-    "mournival": Eine Gruppe, die deine Ideen nach Schwachstellen absucht."
+    "mournival": "Eine Gruppe, die deine Ideen nach Schwachstellen absucht."
 }
 
 INSTALL_DIR = "/usr/local/bin"

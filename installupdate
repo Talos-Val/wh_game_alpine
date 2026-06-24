@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
 import os
 
-INSTALLER_URL = "https://raw.githubusercontent.com/Talos-Val/linux_tools/refs/heads/main/installer"
+# Die URL zu deinem Installer-Skript auf GitHub
+URL = "https://raw.githubusercontent.com/Talos-Val/linux_tools/refs/heads/main/installer"
+TARGET = "/usr/local/bin/installer"
 
 def installupdate():
-    print("--- Lade neuesten Installer ---")
+    print("--- Lade neuesten Installer herunter... ---")
     
-    # Installer herunterladen und in eine temporäre Datei schreiben
-    os.system(f"curl -s {INSTALLER_URL} -o /tmp/installer")
+    # 1. Installer von GitHub nach /usr/local/bin/installer laden
+    # curl -f gibt einen Fehler aus, wenn der Download fehlschlägt
+    status = os.system(f"curl -fs {URL} -o {TARGET}")
     
-    # Ausführbar machen
-    os.system("chmod +x /tmp/installer")
-    
-    # Installer ausführen
-    print("--- Führe Installer aus ---")
-    os.system("/tmp/installer")
-    
-    print("\n--- Update komplett! ---")
+    if status == 0:
+        # 2. Ausführbar machen
+        os.system(f"chmod +x {TARGET}")
+        print(f"--- Erfolg! '{TARGET}' wurde aktualisiert. ---")
+        print("Du kannst den Installer jetzt jederzeit mit dem Befehl 'installer' starten.")
+    else:
+        print("--- Fehler! Konnte den Installer nicht herunterladen. ---")
 
 if __name__ == "__main__":
     installupdate()

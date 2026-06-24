@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import os
+
+INSTALLER_URL = "https://raw.githubusercontent.com/Talos-Val/linux_tools/refs/heads/main/installer"
+
+def installupdate():
+    print("--- Lade neuesten Installer ---")
+    
+    # Installer herunterladen und in eine temporäre Datei schreiben
+    os.system(f"curl -s {INSTALLER_URL} -o /tmp/installer")
+    
+    # Ausführbar machen
+    os.system("chmod +x /tmp/installer")
+    
+    # Installer ausführen
+    print("--- Führe Installer aus ---")
+    os.system("/tmp/installer")
+    
+    print("\n--- Update komplett! ---")
+
+if __name__ == "__main__":
+    installupdate()

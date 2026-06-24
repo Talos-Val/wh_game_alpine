@@ -4,3 +4,4 @@ after that
 installupdate
 after that
 installer --install
+If you have Ideas, write them in the Ideas.md

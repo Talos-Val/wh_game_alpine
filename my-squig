@@ -1,89 +1,83 @@
 #!/usr/bin/env python3
-import time
-import os
+import time, os, random
+from datetime import datetime
 
-# --- KONFIGURATION DER SPEICHERORTE ---
-# Wir speichern alles in einem versteckten Ordner in deinem Home-Verzeichnis
+# --- SPEICHERORTE ---
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".squig_data")
-STATUS_FILE = os.path.join(DATA_DIR, "squig_data.txt")
-WEG_FILE = os.path.join(DATA_DIR, "squig_weg.txt")
+if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
+STATUS_FILE = os.path.join(DATA_DIR, "data.txt")
 
-# Stelle sicher, dass der Ordner existiert
-if not os.path.exists(DATA_DIR):
-    os.makedirs(DATA_DIR)
+# --- ASCII-FRAMES ---
+FRAMES = {
+    "idle": ["      .-------.      ", "     /   O O   \\     ", "    |     ^     |    ", "    |  \\_____/  |    ", "     \\_________/     "],
+    "schlaf": ["      .-------.      ", "     /   - -   \\     ", "    |     ^     |    ", "    |  \\_____/  | Zzz", "     \\_________/     "],
+    "essen": ["      .-------.      ", "     /   O O   \\     ", "    |     V     |    ", "    |  \\_OMNOM_/ |    ", "     \\_________/     "],
+    "waffen": {"m": "🔪", "a": "🔫", "r": "🚀"}
+}
 
-def lade_squig():
+def draw(h, l, e, t, w, sleeping):
+    os.system('clear')
+    print(f"💰 Teef: {t} | ❤️ Hunger: {h}% | 😊 Laune: {l}% | ⚡ Energie: {e}% | Waffe: {w}")
+    art = FRAMES["schlaf"] if sleeping else FRAMES["idle"]
+    for i, line in enumerate(art):
+        if i == 2 and w in FRAMES["waffen"]:
+            line = line.replace("|", FRAMES["waffen"][w] + "|")
+        print(line)
+
+def squig_pet():
+    # Laden: h, l, e, t, w, last_time
     if os.path.exists(STATUS_FILE):
         with open(STATUS_FILE, "r") as f:
             d = f.read().split(",")
-            return int(d[0]), int(d[1]), int(d[2]), float(d[3])
-    # Standardwerte, falls keine Datei existiert
-    return 50, 50, 0, time.time()
+            h, l, e, t, w, last = int(d[0]), int(d[1]), int(d[2]), int(d[3]), d[4], float(d[5])
+    else: h, l, e, t, w, last = 50, 50, 100, 0, "n", time.time()
 
-def speichere_squig(h, l, t):
-    with open(STATUS_FILE, "w") as f:
-        # hunger, laune, teef, zeitstempel
-        f.write(f"{h},{l},{t},{time.time()}")
+    diff = time.time() - last
+    # Variable Schlafsituation (Zufall + Energie)
+    schwelle = 20 + random.randint(-5, 5)
+    was_sleeping = e < schwelle
+    
+    # Zustandsberechnung
+    if e < schwelle: # Schlafen
+        e = min(100, e + int(diff / 15)) # Erholung ist schneller
+    else: # Aktiv
+        e = max(0, e - int(diff / 120))
+        h = min(100, h + int(diff / 60))
+        l = max(0, l - int(diff / 240))
+        # Teef-Generierung erhöht (1 Teef alle 5 statt 10 Sekunden)
+        t += int(diff / 5) * (1 if l > 50 else 0)
 
-def squig_pet():
-    # 1. PRÜFUNG: Ist er weggelaufen?
-    if os.path.exists(WEG_FILE):
-        print("😭 Dein Squig ist weggelaufen... Du hast ihn zu lange vernachlässigt!")
-        wahl = input("Willst du ihn mit 50 Teef suchen? (j/n): ").lower()
-        if wahl == "j":
-            # Hier könntest du noch eine Teef-Prüfung einbauen
-            os.remove(WEG_FILE)
-            speichere_squig(50, 50, 0)
-            print("Du hast ihn gefunden! Er ist wieder da. 🎉")
-            return
-        else:
-            return
+    # Erwachen-Bonus
+    if was_sleeping and e >= schwelle:
+        bonus = int(diff / 10)
+        t += bonus
+        print(f"🎉 Ausgeruht! Bonus-Teef: {bonus}"); time.sleep(1)
 
-    # 2. LADE DATEN
-    hunger, laune, teef, last_time = lade_squig()
-    jetzt = time.time()
-    diff = jetzt - last_time
-
-    # 3. WEGLAUF-CHECK (1 Woche = 604800 Sekunden)
-    if diff > 604800:
-        with open(WEG_FILE, "w") as f: f.write("weg")
-        print("Dein Squig hat das Weite gesucht! 🏃‍♂️")
-        return
-
-    # 4. PASSIVE BERECHNUNGEN
-    # Hunger steigt, Laune sinkt, Teef wächst passiv
-    hunger = min(100, hunger + int(diff / 60))
-    laune = max(0, laune - int(diff / 120))
-    teef += int(diff / 10) * (1 if laune > 50 else 0)
-
-    # 5. HAUPTMENÜ
     while True:
-        print(f"\n--- SQUIG-STATUS ---")
-        print(f"💰 Teef: {teef} | ❤️ Hunger: {hunger}% | 😊 Laune: {laune}%")
-        print("1 - Füttern | 2 - Spielen | 3 - Waffen kaufen | 4 - Speichern & Beenden")
+        is_sleeping = e < schwelle
+        draw(h, l, e, t, w, is_sleeping)
         
-        wahl = input("> ")
-        if wahl == "1":
-            f = input("Was? [M]ensch, [O]rk, [G]rot: ").lower()
-            if f == 'm': hunger -= 50; teef -= 5
-            elif f == 'o': hunger -= 30
-            elif f == 'g': hunger -= 10
-            hunger = max(0, hunger)
-        elif wahl == "2":
-            a = input("Was? [S]töckchen, [J]agen: ").lower()
-            if a == 's': laune += 20
-            elif a == 'j': laune += 40
-        elif wahl == "3":
-            print(f"Verfügbar: {teef} Teef")
-            print("[A]K47: 100 Teef | [M]esser: 40 Teef")
-            kauf = input("> ").lower()
-            if kauf == "a" and teef >= 100: teef -= 100; print("🔫 Bewaffnet!")
-            elif kauf == "m" and teef >= 40: teef -= 40; print("🔪 Bewaffnet!")
-            else: print("Zu wenig Teef!")
+        if is_sleeping:
+            print("Squig schläft tief... (4: Speichern & Beenden)"); wahl = input("> ")
+        else:
+            print("\n1:Füttern | 2:Spielen | 3:Waffen | 4:Speichern")
+            wahl = input("> ")
+        
+        if wahl == "1" and not is_sleeping:
+            print("[K]ostenlos (Grot) | [M]ensch (5 Teef) | [O]rk (15 Teef)")
+            f = input("> ").lower()
+            if f == 'm' and t >= 5: h = max(0, h - 50); t -= 5; e = min(100, e + 10)
+            elif f == 'o' and t >= 15: h = max(0, h - 80); t -= 15; e = min(100, e + 20)
+            else: h = max(0, h - 10); e = min(100, e + 5)
+            os.system('clear'); print("\n".join(FRAMES["essen"])); time.sleep(1)
+        elif wahl == "2" and not is_sleeping:
+            l = min(100, l + 20); e = max(0, e - 20)
+        elif wahl == "3" and not is_sleeping:
+            w_wahl = input("Waffe: [m]esser, [a]k47, [r]akete: ")
+            if w_wahl in ['m','a','r']: w = w_wahl
         elif wahl == "4":
-            speichere_squig(hunger, laune, teef)
-            print("Daten gespeichert. Bis bald!")
+            with open(STATUS_FILE, "w") as f: f.write(f"{h},{l},{e},{t},{w},{time.time()}")
             break
-
+            
 if __name__ == "__main__":
     squig_pet()

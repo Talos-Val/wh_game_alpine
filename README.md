@@ -1,7 +1,7 @@
 to install:
-curl -s https://raw.githubusercontent.com/Talos-Val/linux_tools/main/installupdate -o /usr/local/bin/installupdate
+sudo curl -s https://raw.githubusercontent.com/Talos-Val/linux_tools/main/installupdate -o /usr/local/bin/installupdate
 after that
-chmod +x /usr/local/bin/installupdate
+sudo chmod +x /usr/local/bin/installupdate
 after that
 installupdate
 after that

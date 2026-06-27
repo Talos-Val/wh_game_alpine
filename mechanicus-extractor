@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 
 # ==========================================
-# AUTOMATISCHER INSTALLATIONS-RITUS (No Sudo)
+# SEGNETER INSTALLATIONS-RITUS (Fix für Ubuntu/WSL)
 # ==========================================
 def install_dependencies():
     required_packages = {
@@ -24,25 +24,29 @@ def install_dependencies():
         print("\033[33m[WARNUNG] Fehlende Maschinengeist-Komponenten erkannt.\033[0m")
         print(f"\033[36mStarte autarken Installations-Ritus für: {', '.join(missing_packages)}...\033[0m")
         try:
-            # Installiert die Pakete lokal im User-Verzeichnis, benötigt KEIN sudo!
+            # Nutzt --break-system-packages um PEP 668 in Ubuntu zu überreiten
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages"] + missing_packages)
-            print("\033[32m✓ Installations-Ritus erfolgreich abgeschlossen. Komponenten initialisiert.\033[0m\n")
+            print("\033[32m✓ Installations-Ritus erfolgreich abgeschlossen.\033[0m\n")
+            
+            # WICHTIG: Erzwingt, dass Python die lokalen User-Pfade sofort einliest!
+            user_site = os.path.expanduser("~/.local/lib/python" + ".".join(sys.version.split(".")[:2]) + "/site-packages")
+            if user_site not in sys.path:
+                sys.path.insert(0, user_site)
         except Exception as e:
             print(f"\033[31m[FEHLER] Installations-Ritus fehlgeschlagen: {e}\033[0m")
-            print("\033[31mBitte installiere die Pakete manuell via: pip install yt-dlp requests\033[0m")
             sys.exit(1)
 
-    # Prüfen ob FFmpeg im System installiert ist (wichtig für YT-Downloads)
+    # Prüfen ob FFmpeg im System vorhanden ist
     if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
         print("\033[33m[WARNUNG] 'ffmpeg' wurde im System-Schrein nicht gefunden!\033[0m")
         print("\033[33mYouTube-Downloads könnten fehlschlagen oder Audio/Video nicht zusammenfügen.\033[0m")
-        print("\033[36mBehebung falls nötig: 'sudo apt install ffmpeg' im Terminal ausführen.\033[0m\n")
+        print("\033[36mBehebung: Führe nach dem Beenden 'sudo apt install ffmpeg' aus.\033[0m\n")
         input("Drücke ENTER um dennoch fortzufahren...")
 
-# Starte den Ritus vor dem Laden der eigentlichen Logik
+# Ritus ausführen, bevor der Hauptcode importiert wird
 install_dependencies()
 
-# Jetzt können die Module sicher geladen werden
+# Nun können die Bibliotheken sicher geladen werden
 from yt_dlp import YoutubeDL
 import requests
 
@@ -58,16 +62,17 @@ VAULT_DIR = "Omnissiah_Data_Vault"
 
 def banner():
     os.system('clear' if os.name == 'posix' else 'cls')
-    print(f"""
-{R}{B}    .:: ADAPTUS MECHANICUS DATA EXCAVATOR v3.5 ::.
-         _     _      _                                  
-        / \   | |    | |                                 
-       / _ \  | |    | |                                 
-      / ___ \ | |___ | |___                              
-     /_/   \_\|_____||_____|                             
-{W}{C}   [ Ein Lobpreis dem Omnissiah. Abhängigkeiten überprüft. ]
-   [ Logische Zeitrechnung: {datetime.now().strftime('%Y-%m-%d')} ]{W}
-    """)
+    # r""" verhindert die Syntax-Warnung bei Backslashes
+    print(r"""
+█████╗ ██████╗ ███████╗██████╗ ████████╗██╗   ██╗███████╗
+██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
+███████║██║  ██║█████╗  ██████╔╝   ██║   ██║   ██║███████╗
+██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
+██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
+╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v4.0 ::.
+""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Logischer Zustand: Bereit. ]\n"
+      f"   [ Logische Zeitrechnung: {datetime.now().strftime('%Y-%m-%d')} ]{W}\n")
 
 def get_safe_filename(text):
     return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()

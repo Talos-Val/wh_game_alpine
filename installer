@@ -27,7 +27,8 @@ TOOLS = {
     "wh-alpine": "Das Warhammer-Hauptspiel.",
     "worm-race": "Ein Wurmrennen.",
     "mournival": "Eine Gruppe, die deine Ideen nach Schwachstellen absucht.",
-    "cogitator": "Ein großes Linux-Tool, dass den Nutzer mit vielen Möglichkeiten unterstützt."
+    "cogitator": "Ein großes Linux-Tool, dass den Nutzer mit vielen Möglichkeiten unterstützt.",
+    "mechanicus-extractor": "Ein Tool, mit dem man Redditbeiträge, Streams und Youtube-Videos downloaden kann."
 }
 
 INSTALL_DIR = "/usr/local/bin"

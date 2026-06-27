@@ -25,7 +25,7 @@ def install_dependencies():
         print(f"\033[36mStarte autarken Installations-Ritus für: {', '.join(missing_packages)}...\033[0m")
         try:
             # Installiert die Pakete lokal im User-Verzeichnis, benötigt KEIN sudo!
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing_packages)
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages"] + missing_packages)
             print("\033[32m✓ Installations-Ritus erfolgreich abgeschlossen. Komponenten initialisiert.\033[0m\n")
         except Exception as e:
             print(f"\033[31m[FEHLER] Installations-Ritus fehlgeschlagen: {e}\033[0m")

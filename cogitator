@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ==============================================================================
+#                 GRIMDARK OMNIS-TOOL: LINUX COGITATOR UTILITY
+# ==============================================================================
+# Themes: Adeptus Custodes, Thousand Sons, Orks, Night Lords
+# Operating Mode: 100% Standalone & Offline (Standard Python Library Only)
+# ==============================================================================
+
+import os
+import sys
+import shutil
+import socket
+import json
+import datetime
+import argparse
+import tarfile
+import getpass
+from urllib.request import Request, urlopen
+
+# Faction Aesthetics Configuration
+FACTIONS = {
+    "custodes": {
+        "name": "Adeptus Custodes",
+        "color_primary": "\033[1;33m",  # Bold Gold
+        "color_secondary": "\033[1;37m",  # Bold White
+        "accent": "\033[0;33m",
+        "crest": """
+      ,-''''-.
+     /  _--_  \\
+    |  /    \\  |
+    |  \\_--_/  |
+     \\        /
+   _,-'------'-._
+  /  _  ____  _  \\
+ |  / \\/    \\/ \\  |
+ |  |  |    |  |  |
+ |  \\_/\\____/\\_/  |
+  \\_            _/
+    '----------'
+    - ADEPTUS CUSTODES -
+        """,
+        "title": "THE EMPEROR'S SHIELD & SECURE COGITATOR GATEWAY",
+        "greeting": "By the Order of the Captain-General, this cogitator is scanned and sanctified.",
+        "purgation_msg": "Purging data archives with divine flame. No corruption shall remain.",
+        "telemetry_header": "SACRED ARCHIVE TELEMETRY LOGS (TERRA CORE)",
+        "backup_msg": "Sealing the vault. Holy protective shielding initialized."
+    },
+    "thousand_sons": {
+        "name": "Thousand Sons",
+        "color_primary": "\033[1;36m",  # Aqua/Teal Blue
+        "color_secondary": "\033[1;33m",  # Bold Gold
+        "accent": "\033[0;34m",
+        "crest": """
+       /\\  /\\
+      /  \\/  \\
+     /        \\
+    |   _\\/_   |
+    |  <____>  |
+     \\  /\\/\\  /
+      \\      /
+       \\    /
+        \\  /
+         \\/
+    - THOUSAND SONS -
+        """,
+        "title": "ARCANE LIBRARIUM SECRETS & WARP DATA CHRONICLES",
+        "greeting": "The Red Scrolls unfold. Knowledge is power, guard it well.",
+        "purgation_msg": "Casting the Rubric of Purgation. Shifting useless data into the ether.",
+        "telemetry_header": "SORCEROUS COGITATOR STATE & ESSENCE FLOW ANALYSIS",
+        "backup_msg": "Scribing runes of containment. Your scrolls are secured in the Silver Towers."
+    },
+    "orks": {
+        "name": "Goff Orks",
+        "color_primary": "\033[1;32m",  # Bold Green
+        "color_secondary": "\033[1;31m",  # Bold Red (Goes faster!)
+        "accent": "\033[0;33m",
+        "crest": """
+      _   _
+     ( \\_/ )
+    _\\\\_ _//_
+   /  _   _  \\
+  |  / \\ / \\  |
+  |  | | | |  |
+  |  \\_/ \\_/  |
+   \\  _ _ _  /
+    \\/ \\_/ \\/
+       - GOFF ORKS -
+        """,
+        "title": "DA BIG MEK'S DAKKA DAKKA LINUX SCRAP-TOOL",
+        "greeting": "WAAAAAGH! MEKBOY TOOL IS GOIN' LIVE! RED SCRIPTS RUN FASTEST!!!",
+        "purgation_msg": "STOMPIN' DA GRETCHINS AN' KRUSHIN' DA CACHE!!!",
+        "telemetry_header": "TRUKK ENGINE HEALTH 'AN DAKKA RESOURCE MONITOR",
+        "backup_msg": "LOOTIN' YER FILES AN' STUFFIN' 'EM IN DA SAFE TRUKK!"
+    },
+    "night_lords": {
+        "name": "Night Lords",
+        "color_primary": "\033[1;34m",  # Midnight Blue
+        "color_secondary": "\033[1;31m",  # Crimson/Blood Red
+        "accent": "\033[1;30m",  # Dark Grey/Shadow
+        "crest": """
+       \\\\\\     ///
+        \\\\\\   ///
+     ,----\\\\_//----.
+    /  _ _ \\_/ _ _  \\
+   |  (o) )   ( (o)  |
+   |      / ^ \\      |
+    \\    /_---_\\    /
+     '---\\_____/---'
+     - NIGHT LORDS -
+        """,
+        "title": "STALKING SHADOWS SYSTEM AUDITOR & TERROR-MONITOR",
+        "greeting": "We have come for your system. Fear is the ultimate network scanner.",
+        "purgation_msg": "Skinning obsolete logs alive. Whispering terrors into the empty space.",
+        "telemetry_header": "PREY TARGET EXPLOIT SCAN & CORE SYSTEM FRAILTY REPORT",
+        "backup_msg": "Dragging target assets into the Dreadclaw Vault. Locked in shadow."
+    }
+}
+
+ACTIVE_FACTION_ID = "custodes"  # Default faction (Can be overridden via menu or flags)
+
+# Color variables initialized dynamically
+C_END = "\033[0m"
+C_BOLD = "\033[1m"
+
+def get_colors(faction_id):
+    cfg = FACTIONS.get(faction_id, FACTIONS["custodes"])
+    return cfg["color_primary"], cfg["color_secondary"], cfg["accent"], cfg
+
+def print_header(faction_id):
+    c_prm, c_sec, c_acc, cfg = get_colors(faction_id)
+    print(f"{c_prm}{'='*80}{C_END}")
+    print(f"{c_sec}{cfg['title']}{C_END}")
+    print(f"{c_acc}Faction Alignment: {C_BOLD}{cfg['name']}{C_END}")
+    print(f"{c_prm}{'='*80}{C_END}")
+    print(f"{c_prm}{cfg['crest']}{C_END}")
+    print(f"{c_sec}{cfg['greeting']}{C_END}")
+    print(f"{c_prm}{'='*80}{C_END}\n")
+
+def get_system_telemetry(faction_id):
+    c_prm, c_sec, c_acc, cfg = get_colors(faction_id)
+    print(f"{c_prm}>>> Running diagnostics: {cfg['telemetry_header']} <<<{C_END}\n")
+    
+    hostname = socket.gethostname()
+    username = getpass.getuser()
+    
+    # Memory Info
+    mem_total, mem_used, mem_free = 0, 0, 0
+    if os.path.exists('/proc/meminfo'):
+        with open('/proc/meminfo', 'r') as f:
+            for line in f:
+                if 'MemTotal' in line:
+                    mem_total = int(line.split()[1]) // 1024
+                elif 'MemFree' in line:
+                    mem_free = int(line.split()[1]) // 1024
+                elif 'Cached' in line:
+                    mem_free += int(line.split()[1]) // 1024
+        mem_used = mem_total - mem_free
+
+    # CPU Load
+    cpu_load = "Unknown"
+    if os.path.exists('/proc/loadavg'):
+        with open('/proc/loadavg', 'r') as f:
+            cpu_load = f.read().strip().split()[0]
+            
+    # Disk Info
+    disk_total, disk_used = 0, 0
+    try:
+        total, used, _ = shutil.disk_usage("/")
+        disk_total = total // (2**30)
+        disk_used = used // (2**30)
+    except Exception:
+        pass
+
+    if faction_id == "custodes":
+        print(f"{c_sec}[TERRA LOG] Cogitator Scribe: {C_BOLD}{username}@{hostname}{C_END}")
+        print(f"  Shield Protection Memory: {mem_used} MB / {mem_total} MB Used")
+        print(f"  Imperial Core CPU Pressure: {cpu_load}")
+        print(f"  Sanctuary Storage: {disk_used} GB / {disk_total} GB Occupied")
+    elif faction_id == "thousand_sons":
+        print(f"{c_sec}[SCROLL LOG] Acolyte Host: {C_BOLD}{username}@{hostname}{C_END}")
+        print(f"  Aura Memory Flux: {mem_used} MB / {mem_total} MB")
+        print(f"  Tzeentch Whispers (CPU Load): {cpu_load}")
+        print(f"  Librarium Grimoire Disk: {disk_used} GB / {disk_total} GB")
+    elif faction_id == "orks":
+        print(f"{c_sec}[DA BOYZ LOG] Mek Driver: {C_BOLD}{username}@{hostname}{C_END}")
+        print(f"  FUEL DRUM SIZE (RAM): {mem_used} SQUIGS / {mem_total} SQUIGS IN USE")
+        print(f"  ENGINE THROTTLE (CPU): {cpu_load} DAKKAS")
+        print(f"  SCRAP YARD SPACE (DISK): {disk_used} BINS / {disk_total} BINS FULL")
+    elif faction_id == "night_lords":
+        print(f"{c_sec}[STALKER LOG] Prey Machine: {C_BOLD}{username}@{hostname}{C_END}")
+        print(f"  Captured Soul Memory: {mem_used} MB / {mem_total} MB Bound")
+        print(f"  Anxiety Levels (CPU): {cpu_load}")
+        print(f"  Torture Chamber Storage: {disk_used} GB / {disk_total} GB Flayed")
+
+def perform_backup(faction_id, source_dir, backup_vault="~/cogitator_vault"):
+    c_prm, c_sec, _, cfg = get_colors(faction_id)
+    if not source_dir or not os.path.exists(source_dir):
+        print(f"{c_sec}[!] Source Sanctum path '{source_dir}' does not exist.{C_END}")
+        return
+
+    print(f"{c_prm}>>> Initializing Archive Liturgy: {cfg['backup_msg']} <<<{C_END}")
+    
+    target_path = os.path.expanduser(backup_vault)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest_file = os.path.join(target_path, f"grimdark_backup_{timestamp}.tar.gz")
+    
+    os.makedirs(target_path, exist_ok=True)
+    
+    try:
+        print(f"{c_sec}  [+] Scribing files into Gzip containment...{C_END}")
+        with tarfile.open(dest_file, "w:gz") as tar:
+            tar.add(source_dir, arcname=os.path.basename(source_dir))
+        print(f"{c_prm}  [SUCCESS] Vault creation completed. Sacred relic stored at: {dest_file}{C_END}")
+    except Exception as e:
+        print(f"{c_sec}  [!] Ritual interrupted! Vault generation failed: {e}{C_END}")
+
+def purge_archives(faction_id):
+    c_prm, c_sec, _, cfg = get_colors(faction_id)
+    print(f"{c_prm}>>> Initiating Archive Exorcism: {cfg['purgation_msg']} <<<{C_END}")
+    
+    temp_dir = "/tmp"
+    removed_bytes = 0
+    removed_files = 0
+    
+    for root, _, files in os.walk(temp_dir):
+        for name in files:
+            filepath = os.path.join(root, name)
+            try:
+                if not os.path.islink(filepath):
+                    file_size = os.path.getsize(filepath)
+                    os.remove(filepath)
+                    removed_bytes += file_size
+                    removed_files += 1
+            except Exception:
+                pass
+                
+    removed_mb = round(removed_bytes / (1024 * 1024), 2)
+    print(f"{c_sec}  [+] Dissolved {removed_files} corrupted files.{C_END}")
+    print(f"  [+] Purged {removed_mb} MB of toxic data wastes.{C_END}")
+    print(f"{c_prm}>>> Log Purge Ritual complete. <<<{C_END}\n")
+
+def scan_warp(faction_id, target_host, ports_str):
+    c_prm, c_sec, _, _ = get_colors(faction_id)
+    ports = []
+    try:
+        ports = [int(p.strip()) for p in ports_str.split(",")]
+    except ValueError:
+        ports = [22, 80, 443, 8080]
+        
+    print(f"{c_prm}>>> Channeling psychic energy to scan Warp Portals on: {target_host} <<<{C_END}")
+    
+    for port in ports:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        try:
+            result = s.connect_ex((target_host, port))
+            if result == 0:
+                print(f"  {c_prm}[OPEN PORT]{C_END} Portal {port} is {C_BOLD}ACTIVE & RECEPTIVE{C_END}")
+        except Exception:
+            pass
+        finally:
+            s.close()
+    print(f"{c_prm}>>> Warp Portal Scan Completed. <<<{C_END}\n")
+
+def inject_aliases(faction_id):
+    c_prm, c_sec, _, cfg = get_colors(faction_id)
+    home = os.path.expanduser("~")
+    rc_files = [os.path.join(home, ".bashrc"), os.path.join(home, ".zshrc")]
+    target_rc = rc_files[0]
+    
+    shell = os.environ.get("SHELL", "")
+    if "zsh" in shell and os.path.exists(rc_files[1]):
+        target_rc = rc_files[1]
+        
+    print(f"{c_prm}>>> Inscribing terminal aliases into {cfg['name']} dialect... <<<{C_END}")
+    
+    custom_aliases = {
+        "gitsmash": "git push --force",
+        "exorcise_cache": "sudo rm -rf /tmp/* ~/.cache/*",
+        "praise_emperor": 'echo "By His Will, My Server Runs!"'
+    }
+    
+    has_sig = False
+    if os.path.exists(target_rc):
+        with open(target_rc, 'r') as f:
+            if "GRIMDARK_OMNIS_TOOL_ALIASES" in f.read():
+                has_sig = True
+                
+    if has_sig:
+        print(f"{c_sec}  [!] Terminal already has the Grimdark scripture. Skipping duplicate inscription.{C_END}")
+        return
+        
+    try:
+        with open(target_rc, 'a') as f:
+            f.write("\n\n# === GRIMDARK_OMNIS_TOOL_ALIASES STARTED ===\n")
+            for name, cmd in custom_aliases.items():
+                f.write(f"alias {name}='{cmd}'\n")
+                print(f"    Inscribed alias: {c_prm}{name}{C_END} -> {c_sec}{cmd}{C_END}")
+            f.write("# === GRIMDARK_OMNIS_TOOL_ALIASES ENDED ===\n")
+        print(f"\n[SUCCESS] Liturgies inscribed! Please run: source {target_rc}\n")
+    except Exception as e:
+        print(f"{c_sec}  [!] Failed to write to {target_rc}: {e}{C_END}")
+
+def package_blessing(faction_id):
+    c_prm, _, _, _ = get_colors(faction_id)
+    print(f"{c_prm}>>> Calling Machine Spirit Pacifiers (DevOps Setup) <<<{C_END}")
+    
+    pm = "apt" if shutil.which("apt-get") else ("pacman" if shutil.which("pacman") else "dnf")
+    commands = {
+        "apt": ["sudo apt-get update -y", "sudo apt-get install -y git curl htop tmux build-essential python3-pip"],
+        "pacman": ["sudo pacman -Syu --noconfirm", "sudo pacman -S --needed --noconfirm git curl htop tmux base-devel python-pip"],
+        "dnf": ["sudo dnf check-update", "sudo dnf install -y git curl htop tmux gcc python3-pip"]
+    }
+    
+    print(f"Detected Package Manager: {C_BOLD}{pm.upper()}{C_END}")
+    for cmd in commands.get(pm, []):
+        print(f"   {cmd}")
+
+def display_menu(faction_id):
+    current_fac = faction_id
+    while True:
+        c_prm, c_sec, _, cfg = get_colors(current_fac)
+        print_header(current_fac)
+        print(f"{c_prm}CHOOSE COGITATOR LITURGY:{C_END}")
+        print(f"  {c_sec}[1]{C_END} Scan Machine Spirit Telemetry")
+        print(f"  {c_sec}[2]{C_END} Compress Files into Secure Vault")
+        print(f"  {c_sec}[3]{C_END} Exorcise Toxic Logs and Waste")
+        print(f"  {c_sec}[4]{C_END} Scan Warp Portals (Network Scout)")
+        print(f"  {c_sec}[5]{C_END} Inscribe Grimdark Terminal Aliases")
+        print(f"  {c_sec}[6]{C_END} List Package DevOps Installers")
+        print(f"  {c_sec}[7]{C_END} Switch Faction Alignment")
+        print(f"  {c_sec}[0]{C_END} Terminate Program Execution")
+        print(f"{c_prm}{'='*80}{C_END}")
+        
+        choice = input(f"{c_sec}Choose Ritual: {C_END}").strip()
+        print("\n" + "="*80)
+        
+        if choice == "1":
+            get_system_telemetry(current_fac)
+        elif choice == "2":
+            src = input(f"{c_sec}Enter source directory to seal: {C_END}").strip()
+            perform_backup(current_fac, src)
+        elif choice == "3":
+            purge_archives(current_fac)
+        elif choice == "4":
+            host = input(f"{c_sec}Enter target IP/Hostname: {C_END}").strip()
+            ports = input(f"{c_sec}Enter ports (comma separated, e.g. 22,80,443): {C_END}").strip()
+            scan_warp(current_fac, host, ports)
+        elif choice == "5":
+            inject_aliases(current_fac)
+        elif choice == "6":
+            package_blessing(current_fac)
+        elif choice == "7":
+            print(f"{c_prm}SELECT NEW FACTION ALIGNMENT:{C_END}")
+            print("  1 - Adeptus Custodes (Holy Custodians)")
+            print("  2 - Thousand Sons (Sorcerous Scholars)")
+            print("  3 - Goff Orks (Loud Scrap Mekboys)")
+            print("  4 - Night Lords (Predatory Assassins)")
+            fac_choice = input("Select alignment: ").strip()
+            if fac_choice == "1": current_fac = "custodes"
+            elif fac_choice == "2": current_fac = "thousand_sons"
+            elif fac_choice == "3": current_fac = "orks"
+            elif fac_choice == "4": current_fac = "night_lords"
+        elif choice == "0":
+            print(f"Cogitator shut down cleanly. The Emperor protects.")
+            break
+            
+        input(f"\nPress Enter to return to main scroll...")
+        os.system('clear' if os.name == 'posix' else 'cls')
+
+def main():
+    parser = argparse.ArgumentParser(description="Grimdark Omnis-Tool - Linux Command Center for 40k Nerds.")
+    parser.add_argument("--faction", type=str, default="custodes", choices=["custodes", "thousand_sons", "orks", "night_lords"], help="Initial faction theme.")
+    parser.add_argument("--interactive", action="store_true", help="Launch interactive visual shell menu.")
+    parser.add_argument("--telemetry", action="store_true", help="Inspect cogitator resources.")
+    parser.add_argument("--backup", type=str, metavar="PATH", help="Backup a specific directories.")
+    parser.add_argument("--clean", action="store_true", help="Purge system garbage and caches.")
+    parser.add_argument("--scan", type=str, metavar="HOST", help="Audit network open ports.")
+    parser.add_argument("--ports", type=str, default="22,80,443,8080", help="Comma separated list of ports for scanning.")
+    
+    args = parser.parse_args()
+    
+    if not any([args.interactive, args.telemetry, args.backup, args.clean, args.scan]):
+        display_menu(args.faction)
+        return
+
+    # Non-interactive mode
+    if args.telemetry:
+        get_system_telemetry(args.faction)
+    if args.backup:
+        perform_backup(args.faction, args.backup)
+    if args.clean:
+        purge_archives(args.faction)
+    if args.scan:
+        scan_warp(args.faction, args.scan, args.ports)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n\nCogitator ritual abruptly interrupted. Entering Stasis.")
+        sys.exit(0)

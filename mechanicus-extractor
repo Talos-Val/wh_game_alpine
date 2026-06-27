@@ -438,7 +438,7 @@ def download_music_platform():
         print(f"\n{Y}[LOG] YouTube-Link erkannt. Extrahiere Audio direkt...{W}")
         artist_input = input(f"{C}» Künstler (für Ordnernamen, ENTER = Unbekannt): {W}").strip()
         artist_folder = get_safe_filename(artist_input) if artist_input else "Unbekannter_Saenger"
-        target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
+        target_dir = f"{vault_dir}/Music_Schrein/Kuenstler/{artist_folder}"
         os.makedirs(target_dir, exist_ok=True)
         ydl_opts_yt = {
             'format': 'bestaudio/best',

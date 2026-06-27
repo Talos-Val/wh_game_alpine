@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+import os
+import sys
+import subprocess
+from datetime import datetime
+
+# ==========================================
+# AUTOMATISCHER INSTALLATIONS-RITUS (No Sudo)
+# ==========================================
+def install_dependencies():
+    required_packages = {
+        "yt_dlp": "yt-dlp",
+        "requests": "requests"
+    }
+    missing_packages = []
+    
+    for module_name, pip_name in required_packages.items():
+        try:
+            __import__(module_name)
+        except ImportError:
+            missing_packages.append(pip_name)
+            
+    if missing_packages:
+        print("\033[33m[WARNUNG] Fehlende Maschinengeist-Komponenten erkannt.\033[0m")
+        print(f"\033[36mStarte autarken Installations-Ritus für: {', '.join(missing_packages)}...\033[0m")
+        try:
+            # Installiert die Pakete lokal im User-Verzeichnis, benötigt KEIN sudo!
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing_packages)
+            print("\033[32m✓ Installations-Ritus erfolgreich abgeschlossen. Komponenten initialisiert.\033[0m\n")
+        except Exception as e:
+            print(f"\033[31m[FEHLER] Installations-Ritus fehlgeschlagen: {e}\033[0m")
+            print("\033[31mBitte installiere die Pakete manuell via: pip install yt-dlp requests\033[0m")
+            sys.exit(1)
+
+    # Prüfen ob FFmpeg im System installiert ist (wichtig für YT-Downloads)
+    if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        print("\033[33m[WARNUNG] 'ffmpeg' wurde im System-Schrein nicht gefunden!\033[0m")
+        print("\033[33mYouTube-Downloads könnten fehlschlagen oder Audio/Video nicht zusammenfügen.\033[0m")
+        print("\033[36mBehebung falls nötig: 'sudo apt install ffmpeg' im Terminal ausführen.\033[0m\n")
+        input("Drücke ENTER um dennoch fortzufahren...")
+
+# Starte den Ritus vor dem Laden der eigentlichen Logik
+install_dependencies()
+
+# Jetzt können die Module sicher geladen werden
+from yt_dlp import YoutubeDL
+import requests
+
+# Sakrale Farb-Codes für das Adeptus-Interface
+R = "\033[31m"    # Mars-Rot
+G = "\033[32m"    # Tech-Grün
+Y = "\033[33m"    # Warn-Gelb
+C = "\033[36m"    # Plasma-Cyan
+B = "\033[1m"     # Aktivierter Binärcode
+W = "\033[0m"     # Reset
+
+VAULT_DIR = "Omnissiah_Data_Vault"
+
+def banner():
+    os.system('clear' if os.name == 'posix' else 'cls')
+    print(f"""
+{R}{B}    .:: ADAPTUS MECHANICUS DATA EXCAVATOR v3.5 ::.
+         _     _      _                                  
+        / \   | |    | |                                 
+       / _ \  | |    | |                                 
+      / ___ \ | |___ | |___                              
+     /_/   \_\|_____||_____|                             
+{W}{C}   [ Ein Lobpreis dem Omnissiah. Abhängigkeiten überprüft. ]
+   [ Logische Zeitrechnung: {datetime.now().strftime('%Y-%m-%d')} ]{W}
+    """)
+
+def get_safe_filename(text):
+    return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
+
+def download_youtube():
+    print(f"\n{B}{C}[RITUS I] COGNITION DES YOUTUBE-CHRONIKEN{W}")
+    url = input("Reiche die heilige YouTube-URL ein: ").strip()
+    if not url: return
+
+    print(f"{Y}Extrahiere Metadaten des Urhebers...{W}")
+    try:
+        with YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            creator = get_safe_filename(info.get('uploader', 'Unbekannter_Creator'))
+            title = get_safe_filename(info.get('title', 'Unbenanntes_Video'))
+    except Exception as e:
+        print(f"{R}Fehler beim Scannen der Frequenzen: {e}{W}")
+        return
+
+    target_dir = f"{VAULT_DIR}/YouTube_Archive/{creator}"
+    os.makedirs(target_dir, exist_ok=True)
+    
+    print(f"{G}Kanal-Schrein identifiziert: {target_dir}/{W}")
+    print(f"{Y}Infiltriere Datenstrom und lade Video: '{title}'...{W}")
+
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'outtmpl': f'{target_dir}/{title}.%(ext)s',
+        'merge_output_format': 'mp4',
+        'quiet': False,
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        print(f"\n{G}✓ Ritus beendet. Video im Kanal-Schrein versiegelt.{W}")
+    except Exception as e:
+        print(f"{R}Fehler im Download-Prozess: {e}{W}")
+
+def download_twitch():
+    print(f"\n{B}{C}[RITUS II] TRANSMISSION DES TWITCH-LIVE-STREAMS{W}")
+    url = input("Gib den Ziel-Kanal oder Stream-Link ein: ").strip()
+    if not url: return
+
+    print(f"{Y}Analysiere Streamer-Identität...{W}")
+    try:
+        with YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            streamer = get_safe_filename(info.get('uploader', 'Unbekannter_Streamer'))
+            title = get_safe_filename(info.get('title', 'Stream_Archiv'))
+    except Exception as e:
+        print(f"{R}Fehler beim Lokalisieren des Senders: {e}{W}")
+        return
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    target_dir = f"{VAULT_DIR}/Twitch_Streams/{streamer}/{today}"
+    os.makedirs(target_dir, exist_ok=True)
+
+    print(f"{G}Zielverzeichnis initialisiert: {target_dir}/{W}")
+    print(f"{Y}Starte permanente Aufzeichnung ab Sekunde 0. [STRG+C] zum Kapseln des Streams!{W}")
+
+    ydl_opts = {
+        'format': 'bestvideo+bestaudio/best',
+        'outtmpl': f'{target_dir}/{title}.%(ext)s',
+        'live_from_start': True,
+        'wait_for_video': 10,
+    }
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+    except KeyboardInterrupt:
+        print(f"\n{G}✓ Datenstrom auf Nutzerbefehl gekappt. Fragment erfolgreich gesichert.{W}")
+    except Exception as e:
+        print(f"{R}Kritischer Fehler im Aufzeichnungs-Schaltkreis: {e}{W}")
+
+def reddit_deep_scraper():
+    print(f"\n{B}{C}[RITUS III] EXZERPTION DES SUBREDDIT-DENKARCHIVS{W}")
+    subreddit = input("Welches Subreddit soll exhumiert werden? (z.B. '40k'): ").strip()
+    if not subreddit: return
+
+    safe_sub = get_safe_filename(subreddit)
+    today = datetime.now().strftime('%Y-%m-%d')
+    
+    sub_dir = f"{VAULT_DIR}/Reddit_Archives/{safe_sub}"
+    target_dir = f"{sub_dir}/{today}"
+    os.makedirs(target_dir, exist_ok=True)
+
+    url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=15"
+    headers = {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; MechanicusScraper)'}
+
+    print(f"{Y}Sende Daten-Sonden zu den Reddit-Servern...{W}")
+    try:
+        res = requests.get(url, headers=headers)
+        if res.status_code != 200:
+            print(f"{R}Fehler: Zugriff verweigert (Code {res.status_code}).{W}")
+            return
+            
+        posts = res.json()['data']['children']
+        
+        for idx, post in enumerate(posts, 1):
+            data = post['data']
+            title = data.get('title', f"post_{idx}")
+            clean_title = get_safe_filename(title)[:40]
+            post_id = data.get('id')
+            
+            post_dir = f"{target_dir}/{idx:02d}_{clean_title}"
+            os.makedirs(post_dir, exist_ok=True)
+            
+            print(f"{G}[Kogitator {idx}/15]{W} Speichere Datensatz: {title[:40]}...")
+            
+            post_text = data.get('selftext', '[Kein Textinhalt - Nur Bild/Link]')
+            author = data.get('author', 'Unbekannt')
+            score = data.get('score', 0)
+            
+            with open(f"{post_dir}/beitrag.txt", "w", encoding="utf-8") as f:
+                f.write(f"PROTOKOLL-TITEL: {title}\n")
+                f.write(f"AUTOR: {author} | REPUTATION: {score}\n")
+                f.write("=" * 50 + "\n\n")
+                f.write(post_text)
+
+            media_url = data.get('url', '')
+            if any(media_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+                try:
+                    ext = media_url.split('.')[-1]
+                    img_data = requests.get(media_url, headers=headers).content
+                    with open(f"{post_dir}/bild.{ext}", 'wb') as img_file:
+                        img_file.write(img_data)
+                except:
+                    pass
+
+            comments_url = f"https://www.reddit.com/r/{subreddit}/comments/{post_id}.json?limit=10"
+            try:
+                comments_res = requests.get(comments_url, headers=headers).json()
+                comments_list = comments_res[1]['data']['children']
+                
+                with open(f"{post_dir}/kommentare.txt", "w", encoding="utf-8") as f:
+                    f.write(f"--- ANALYSIERTE MEINUNGSSTRÖME ---\n\n")
+                    for c_idx, comment in enumerate(comments_list, 1):
+                        c_data = comment.get('data', {})
+                        c_author = c_data.get('author', 'Unbekannt')
+                        c_body = c_data.get('body', '')
+                        if c_body:
+                            f.write(f"[{c_idx}] Adept: {c_author}\n")
+                            f.write(f"{c_body}\n")
+                            f.write("." * 40 + "\n")
+            except:
+                pass
+
+        print(f"\n{G}✓ 15 Kapseln erfolgreich in '{target_dir}/' archiviert.{W}")
+    except Exception as e:
+        print(f"{R}Verbindungsabbruch während der Extraktion: {e}{W}")
+
+def main():
+    while True:
+        banner()
+        print(f"[{R}1{W}] YouTube-Video akquirieren (Kanal-basiert sortiert)")
+        print(f"[{R}2{W}] Twitch Live-Datenstrom abfangen (Streamer -> Datum -> Video)")
+        print(f"[{R}3{W}] Reddit-Subreddit leersaugen (15 neueste Daten-Kapseln)")
+        print(f"[{R}4{W}] Maschinengeist schlafen legen (Beenden)")
+        
+        choice = input(f"\n{B}{R}Gib Befehl ein » {W}").strip()
+        
+        if choice == "1":
+            download_youtube()
+        elif choice == "2":
+            download_twitch()
+        elif choice == "3":
+            reddit_deep_scraper()
+        elif choice == "4":
+            print(f"\n{Y}Maschinengeist fährt in den Standby-Modus. Die Server schlafen.{W}\n")
+            sys.exit()
+        else:
+            print(f"{R}Ungültiger Binärcode! Versuche es erneut.{W}")
+            
+        input(f"\n{C}Drücke ENTER, um die Schaltkreise neu zu laden...{W}")
+
+if __name__ == "__main__":
+    main()

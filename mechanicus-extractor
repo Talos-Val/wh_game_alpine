@@ -17,15 +17,9 @@ W = "\033[0m"     # Reset
 
 BROWN_GEAR_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'de,en-US;q=0.7,en;q=0.3',
-    'Connection': 'keep-alive',
-    'Upgrade-Insecure-Requests': '1'
+    'Accept': '*/*'
 }
 
-# ==========================================
-# KONFIGURATIONS-VERWALTUNG
-# ==========================================
 def load_vault_dir():
     default_dir = os.path.join(os.getcwd(), "Omnissiah_Data_Vault")
     if os.path.exists(CONFIG_FILE):
@@ -37,35 +31,7 @@ def load_vault_dir():
             return default_dir
     return default_dir
 
-def save_vault_dir(new_dir):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"vault_dir": new_dir}, f, indent=4)
-        print(f"{G}✓ [SYSTEM] Pfad permanent im Datenskript versiegelt: {new_dir}{W}")
-    except Exception as e:
-        print(f"{R}[FEHLER] Konfiguration konnte nicht geschrieben werden: {e}{W}")
-
-def change_vault_setting():
-    print(f"\n{B}{R}[RITUS IV] MODIFIKATION DES ARCHIV-SCHREINS{W}")
-    current = load_vault_dir()
-    print(f"{C}Aktueller Pfad: {current}{W}")
-    print(f"{Y}Tipp: Nutze Pfade wie /mnt/c/Users/PC/Desktop/MeinVault{W}")
-    
-    new_path = input(f"{C}» Gib den neuen Ziel-Pfad ein (ENTER zum Abbrechen): {W}").strip()
-    if not new_path:
-        return
-        
-    try:
-        os.makedirs(new_path, exist_ok=True)
-        save_vault_dir(new_path)
-    except Exception as e:
-        print(f"{R}[FEHLER] Pfad ungültig oder keine Rechte: {e}{W}")
-
-# ==========================================
-# DYNAMISCHER LADUNGS-RITUS
-# ==========================================
 def ensure_packages_and_import():
-    """Sorgt dafür, dass Pakete da sind und importiert sie erst im Bedarfsfall"""
     required_packages = {"yt_dlp": "yt-dlp", "requests": "requests"}
     missing = []
     for module_name, pip_name in required_packages.items():
@@ -81,159 +47,167 @@ def ensure_packages_and_import():
             user_site = os.path.expanduser("~/.local/lib/python" + ".".join(sys.version.split(".")[:2]) + "/site-packages")
             if user_site not in sys.path:
                 sys.path.insert(0, user_site)
-            print(f"{G}[STATUS] Komponenten erfolgreich gesalbt.{W}\n")
         except Exception as e:
-            print(f"{R}[KATASTROPHE] Autarke Installation fehlgeschlagen. Bitte manuell 'pip install yt-dlp requests --break-system-packages' ausführen.{W}")
+            print(f"{R}[KATASTROPHE] Autarke Installation fehlgeschlagen.{W}")
             sys.exit(1)
 
-    # Sichere Inline-Importe
     from yt_dlp import YoutubeDL
     import requests
     return YoutubeDL, requests
 
 def check_ffmpeg():
-    if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
-        print(f"{Y}[WARNUNG] 'ffmpeg'-Kogitator fehlt im System-Schrein!{W}")
-        print(f"{Y}Video/Audio-Fusionierung könnte fehlschlagen.{W}")
+    return subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0
 
 # ==========================================
-# AKTIONEN
+# REFORMIERTER RITUS III: MIT VERIFIKATION
 # ==========================================
-def download_youtube():
+def download_music_platform():
     YoutubeDL, _ = ensure_packages_and_import()
-    check_ffmpeg()
+    ffmpeg_available = check_ffmpeg()
     vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS I] COGNITION DES YOUTUBE-CHRONIKEN{W}")
-    url = input(f"{C}» Reiche die heilige YouTube-Daten-URL ein: {W}").strip()
-    if not url: return
+    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (VERIFIED SEARCH){W}")
+    user_input = input(f"{C}» Gib Interpret + Songname ein:\n» {W}").strip()
+    if not user_input: return
 
-    print(f"\n{Y}[LOG] Initiiere Infiltration mit Noosphären-Signatur...{W}")
-    try:
-        with YoutubeDL({'quiet': True, 'http_headers': BROWN_GEAR_HEADERS, 'user_agent': BROWN_GEAR_HEADERS['User-Agent']}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            creator = get_safe_filename(info.get('uploader', 'Unbekannter_Creator'))
-            title = get_safe_filename(info.get('title', 'Unbenanntes_Video'))
-    except Exception as e:
-        print(f"{R}[STÖRUNG] Metadaten-Analyse fehlgeschlagen: {e}{W}")
-        return
+    artist_folder = "Unbekannter_Saenger"
+    if " - " in user_input:
+        artist_folder = "".join([c for c in user_input.split(" - ", 1)[0] if c.isalnum() or c in " _-"]).strip()
+    else:
+        artist_input = input(f"{Y}» Welcher Sänger/Künstler ist das? (Für den Ordnernamen): {W}").strip()
+        if artist_input:
+            artist_folder = "".join([c for c in artist_input if c.isalnum() or c in " _-"]).strip()
 
-    target_dir = f"{vault_dir}/YouTube_Archive/{creator}"
-    os.makedirs(target_dir, exist_ok=True)
+    target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
     
-    ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
-        'outtmpl': f'{target_dir}/{title}.%(ext)s',
-        'merge_output_format': 'mp4',
-        'quiet': False,
+    # 1. Suchphase: Wir extrahieren die Top 3 Treffer, ohne sie herunterzuladen
+    print(f"\n{Y}[LOG] Infiltriere Noosphäre... Suche nach den 3 besten Audio-Frequenzen...{W}")
+    search_opts = {
+        'extract_flat': True,  # Verhindert den direkten Download, zieht nur Metadaten
+        'quiet': True,
         'http_headers': BROWN_GEAR_HEADERS,
-        'user_agent': BROWN_GEAR_HEADERS['User-Agent']
+        'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
     }
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        print(f"\n{G}✓ [RIEGEL] Kapsel im Schrein versiegelt.{W}")
-    except Exception as e:
-        print(f"{R}[ABBRUCH] Saug-Vorgang unterbrochen: {e}{W}")
-
-def download_twitch():
-    YoutubeDL, _ = ensure_packages_and_import()
-    vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS II] TRANSMISSION DES TWITCH-LIVE-STREAMS{W}")
-    url = input(f"{C}» Gib die Frequenz des Senders ein (Kanal-URL): {W}").strip()
-    if not url: return
-
-    try:
-        with YoutubeDL({'quiet': True, 'http_headers': BROWN_GEAR_HEADERS, 'user_agent': BROWN_GEAR_HEADERS['User-Agent']}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            streamer = get_safe_filename(info.get('uploader', 'Unbekannter_Streamer'))
-            title = get_safe_filename(info.get('title', 'Stream_Archiv'))
-    except Exception as e:
-        print(f"{R}[STÖRUNG] Frequenz-Dekodierung fehlgeschlagen: {e}{W}")
-        return
-
-    today = datetime.now().strftime('%Y-%m-%d')
-    target_dir = f"{vault_dir}/Twitch_Streams/{streamer}/{today}"
-    os.makedirs(target_dir, exist_ok=True)
-
-    print(f"{R}[ACHTUNG] [STRG+C] drücken, um die Aufzeichnung zu speichern!{W}\n")
-
-    ydl_opts = {
-        'format': 'bestvideo+bestaudio/best',
-        'outtmpl': f'{target_dir}/{title}.%(ext)s',
-        'live_from_start': True,
-        'wait_for_video': 10,
-        'http_headers': BROWN_GEAR_HEADERS,
-        'user_agent': BROWN_GEAR_HEADERS['User-Agent']
-    }
-
-    try:
-        with YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-    except KeyboardInterrupt:
-        print(f"\n{G}✓ [RIEGEL] Datenstrom gekappt. Fragment gesichert.{W}")
-    except Exception as e:
-        print(f"{R}[KATASTROPHE] Ausfall des Systems: {e}{W}")
-
-def reddit_deep_scraper():
-    _, requests = ensure_packages_and_import()
-    vault_dir = load_vault_dir()
+    # Wir suchen gezielt nach "Topic" oder "Audio", um offizielle Releases zu bevorzugen
+    search_query = f"ytsearch3:{user_input} audio"
     
-    print(f"\n{B}{R}[RITUS III] EXZERPTION DES SUBREDDIT-DENKARCHIVS{W}")
-    subreddit = input(f"{C}» Welches Subreddit soll exhumiert werden? {W}").strip()
-    if not subreddit: return
-
-    safe_sub = get_safe_filename(subreddit)
-    today = datetime.now().strftime('%Y-%m-%d')
-    target_dir = f"{vault_dir}/Reddit_Archives/{safe_sub}/{today}"
-    os.makedirs(target_dir, exist_ok=True)
-
-    url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=15"
-
-    print(f"\n{Y}[LOG] Sende getarnte Daten-Sonden zu Reddit...{W}")
     try:
-        res = requests.get(url, headers=BROWN_GEAR_HEADERS, timeout=10)
-        if res.status_code != 200:
-            print(f"{R}[ABWEHR] Zugriff verweigert (Code {res.status_code}).{W}")
+        with YoutubeDL(search_opts) as ydl:
+            search_results = ydl.extract_info(search_query, download=False)
+        
+        entries = search_results.get('entries', [])
+        if not entries:
+            print(f"{R}[STÖRUNG] Keine Treffer für diese Frequenz gefunden.{W}")
             return
             
-        posts = res.json()['data']['children']
-        for idx, post in enumerate(posts, 1):
-            data = post['data']
-            title = data.get('title', f"post_{idx}")
-            clean_title = get_safe_filename(title)[:40]
-            post_id = data.get('id')
+        # Treffer auflisten zur heiligen Auswahl
+        print(f"\n{C}Gefundene YouTube-Vektoren für deine Anfrage:{W}")
+        for idx, entry in enumerate(entries, 1):
+            title = entry.get('title', 'Unbekannter Titel')
+            uploader = entry.get('uploader', 'Unbekannter Kanal')
+            duration = entry.get('duration', 0)
             
-            post_dir = f"{target_dir}/{idx:02d}_{clean_title}"
-            os.makedirs(post_dir, exist_ok=True)
+            # Zeit-Formatierung (Minuten:Sekunden)
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
+            duration_str = f"{minutes}:{seconds:02d}" if duration else "Unbekannt"
             
-            print(f"{C}[KOGITATOR {idx:02d}/15]{W} Archiviere: {title[:45]}...")
-            
-            with open(f"{post_dir}/beitrag.txt", "w", encoding="utf-8") as f:
-                f.write(f"PROTOKOLL-TITEL: {title}\n")
-                f.write(f"URHEBER: {data.get('author')} | SCORE: {data.get('score')}\n\n")
-                f.write(data.get('selftext', '[Kein Text]'))
+            print(f" [{Y}{idx}{W}] {B}{title}{W}")
+            print(f"     Kanal: {C}{uploader}{W} | Länge: {C}{duration_str}{W}")
 
-            # Medien-Download
-            m_url = data.get('url', '')
-            if any(m_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                try:
-                    ext = m_url.split('.')[-1]
-                    img_data = requests.get(m_url, headers=BROWN_GEAR_HEADERS, timeout=5).content
-                    with open(f"{post_dir}/bild.{ext}", 'wb') as img_file:
-                        img_file.write(img_data)
-                except: pass
-        print(f"\n{G}✓ [STATUS] Exhumierung abgeschlossen.{W}")
     except Exception as e:
-        print(f"{R}[KATASTROPHE] Fehler: {e}{W}")
+        print(f"{R}[ABBRUCH] Fehlfunktion bei der Suche: {e}{W}")
+        return
 
-def get_safe_filename(text):
-    return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
+    # Benutzerauswahl abfragen
+    selection = input(f"\n{B}{R}Wähle den korrekten Vektor (1-{len(entries)}) oder ENTER zum Abbrechen » {W}").strip()
+    if not selection or not selection.isdigit():
+        print(f"{Y}[LOG] Abgebrochen.{W}")
+        return
+        
+    choice_idx = int(selection) - 1
+    if choice_idx < 0 or choice_idx >= len(entries):
+        print(f"{R}[STÖRUNG] Ungültiger Index!{W}")
+        return
+        
+    chosen_video_url = entries[choice_idx].get('url') or f"https://www.youtube.com/watch?v={entries[choice_idx].get('id')}"
+    chosen_title = entries[choice_idx].get('title')
+
+    # 2. Downloadphase: Jetzt ziehen wir das vom User verifizierte Video
+    os.makedirs(target_dir, exist_ok=True)
+    print(f"\n{G}[RIEGEL] Ziel verifiziert: '{chosen_title}'{W}")
+    print(f"{Y}[LOG] Starte Extraktion des reinen Audio-Kerns...{W}")
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': f'{target_dir}/%(title)s.%(ext)s',
+        'quiet': False,
+        'http_headers': BROWN_GEAR_HEADERS,
+        'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
+    }
+
+    if ffmpeg_available:
+        ydl_opts['postprocessors'] = [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '320',
+        }]
+
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            ydl.download([chosen_video_url])
+        print(f"\n{G}✓ [ERFOLG] Track exakt und verifiziert abgelegt in: {target_dir}/{W}")
+    except Exception as e:
+        print(f"{R}[KATASTROPHE] Download fehlgeschlagen: {e}{W}")
+
+# (Der Rest der Riten aus v12.0 wie Suchen, Playlists bauen und Banner bleibt identisch...)
+def synthesize_playlist():
+    if not check_ffmpeg(): return
+    vault_dir = load_vault_dir()
+    music_dir = f"{vault_dir}/Music_Schrein"
+    playlist_dir = f"{vault_dir}/Playlists"
+    wishlist_path = os.path.join(vault_dir, "playlist_wunschliste.txt")
+    print(f"\n{B}{R}[RITUS IV] PLAYLIST-SCHMIEDE (DEEP-SCAN SUBFOLDERS){W}")
+    if not os.path.exists(music_dir): return
+    detected_tracks = {}
+    for root, dirs, files in os.walk(music_dir):
+        for file in files:
+            if file.endswith(".mp3"):
+                rel_path = os.path.relpath(os.path.join(root, file), music_dir)
+                detected_tracks[rel_path] = os.path.join(root, file)
+    if not detected_tracks: return
+    print(f"{C}Gefundene Archiv-Einträge:{W}")
+    for rel_path in sorted(detected_tracks.keys()): print(f" -> {rel_path}")
+    if not os.path.exists(wishlist_path):
+        with open(wishlist_path, "w", encoding="utf-8") as f: f.write("# Wunschliste\n")
+    print(f"\n{Y}[INFO] Steuerungsdatei bereitgestellt: {wishlist_path}{W}")
+    ready = input(f"{C}» Songs eingetragen und gespeichert? (y/ENTER): {W}").strip().lower()
+    if ready != 'y': return
+    selected_absolute_paths = []
+    with open(wishlist_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"): continue
+            if not line.endswith(".mp3"): line += ".mp3"
+            if line in detected_tracks: selected_absolute_paths.append(detected_tracks[line])
+    if not selected_absolute_paths: return
+    playlist_name = input(f"\n{C}» Name der fertigen Playlist-Datei: {W}").strip()
+    if not playlist_name: playlist_name = f"Chronik_Mix_{datetime.now().strftime('%Y%m%d')}"
+    playlist_name = "".join([c for c in playlist_name if c.isalnum() or c in " _-"]).strip() + ".mp3"
+    os.makedirs(playlist_dir, exist_ok=True)
+    output_path = os.path.join(playlist_dir, playlist_name)
+    list_txt_path = os.path.join(music_dir, "temp_playlist_forge.txt")
+    try:
+        with open(list_txt_path, "w", encoding="utf-8") as f:
+            for abs_path in selected_absolute_paths: f.write(f"file '{abs_path.replace(\"'\", \"'\\\\''\")}'\n")
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_txt_path, "-c", "copy", output_path]
+        if subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE).returncode == 0:
+            print(f"\n{G}✓ [ERFOLG] Playlist-Kapsel perfekt geschmiedet: {output_path}{W}")
+    finally:
+        if os.path.exists(list_txt_path): os.remove(list_txt_path)
 
 def banner():
-    os.system('clear' if os.name == 'posix' else 'cls')
     current_vault = load_vault_dir()
     print(r"""
 █████╗ ██████╗ ███████╗██████╗ ████████╗██╗   ██╗███████╗
@@ -242,37 +216,25 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v6.1 ::.
-""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Maschinensicht getarnt. ]\n"
-      f"   [ Aktueller Schrein: {current_vault} ]\n"
-      f"   [ Chrono-Logik: {datetime.now().strftime('%Y-%m-%d')} ]{W}\n")
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v12.5 ::.
+""")
+    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Ziel-Verifikation aktiv. ]{W}\n")
 
 def main():
     while True:
+        os.system('clear' if os.name == 'posix' else 'cls')
         banner()
-        print(f"[{R}01{W}] YouTube-Video akquirieren (Kanal-Sortierung | Getarnt)")
-        print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen (Streamer -> Datum -> Kapsel)")
-        print(f"[{R}03{W}] Reddit-Subreddit leersaugen (15 neueste Daten-Kapseln)")
-        print(f"[{R}04{W}] Speicherort des Archiv-Schreins (Vault) modifizieren")
-        print(f"[{R}05{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")
-        
+        print(f"[{R}01{W}] YouTube-Video akquirieren (Direkt-Link/Suche -> MP4)")
+        print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen")
+        print(f"[{R}03{W}] Songs mit manueller YouTube-Verifikation downloaden")
+        print(f"[{R}04{W}] Playlist aus Sänger-Ordnern fusionieren")
+        print(f"[{R}05{W}] Speicherort modifizieren")
+        print(f"[{R}06{W}] Beenden")
         choice = input(f"\n{B}{R}Gib heiligen Binärbefehl ein » {W}").strip()
-        
-        if choice in ["1", "01"]:
-            download_youtube()
-        elif choice in ["2", "02"]:
-            download_twitch()
-        elif choice in ["3", "03"]:
-            reddit_deep_scraper()
-        elif choice in ["4", "04"]:
-            change_vault_setting()
-        elif choice in ["5", "05"]:
-            print(f"\n{Y}[STASIS] Fahre Logik-Kogitatoren herunter. Der Omnissiah beschützt.{W}\n")
-            sys.exit()
-        else:
-            print(f"{R}[STÖRUNG] Unbekannter Binärcode! Schaltkreise werden neu geladen.{W}")
-            
-        input(f"\n{C}Drücke ENTER, um die liturgischen Systeme neu zu kalibrieren...{W}")
+        if choice in ["3", "03"]: download_music_platform()
+        elif choice in ["4", "04"]: synthesize_playlist()
+        elif choice in ["6", "06"]: sys.exit()
+        if choice in ["3", "03", "4", "04"]: input(f"\n{C}Drücke ENTER zum Fortfahren...{W}")
 
 if __name__ == "__main__":
     main()

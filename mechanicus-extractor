@@ -427,9 +427,40 @@ def download_music_platform():
     ffmpeg_available = check_ffmpeg()
     vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (MULTI-VEKTOR v15.0){W}")
-    user_input = input(f"{C}» Gib Interpret+Songname ODER Spotify-Link ein:\n» {W}").strip()
+    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (MULTI-VEKTOR v15.2){W}")
+    user_input = input(f"{C}» URL (YouTube/Spotify) ODER Künstler - Titel:\n» {W}").strip()
     if not user_input: return
+
+    # ── YouTube-Link direkt → Audio extrahieren ──────────────────────────
+    is_yt = ("youtube.com/watch" in user_input or "youtu.be/" in user_input
+             or "youtube.com/shorts/" in user_input)
+    if is_yt:
+        print(f"\n{Y}[LOG] YouTube-Link erkannt. Extrahiere Audio direkt...{W}")
+        artist_input = input(f"{C}» Künstler (für Ordnernamen, ENTER = Unbekannt): {W}").strip()
+        artist_folder = get_safe_filename(artist_input) if artist_input else "Unbekannter_Saenger"
+        target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
+        os.makedirs(target_dir, exist_ok=True)
+        ydl_opts_yt = {
+            'format': 'bestaudio/best',
+            'outtmpl': f'{target_dir}/%(title)s.%(ext)s',
+            'quiet': False,
+            'http_headers': BROWN_GEAR_HEADERS,
+            'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
+        }
+        if ffmpeg_available:
+            ydl_opts_yt['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '320',
+            }]
+        try:
+            with YoutubeDL(ydl_opts_yt) as ydl:
+                ydl.download([user_input])
+            print(f"\n{G}✓ [ERFOLG] Audio extrahiert und im Schrein versiegelt!{W}")
+        except Exception as e:
+            print(f"{R}[KATASTROPHE] Download fehlgeschlagen: {e}{W}")
+        return
+    # ─────────────────────────────────────────────────────────────────────
 
     search_query = user_input
     artist_folder = "Unbekannter_Saenger"
@@ -607,81 +638,116 @@ def synthesize_playlist():
     vault_dir = load_vault_dir()
     music_dir = f"{vault_dir}/Music_Schrein"
     playlist_dir = f"{vault_dir}/Playlists"
-    wishlist_path = os.path.join(vault_dir, "playlist_wunschliste.txt")
-    
-    print(f"\n{B}{R}[RITUS IV] PLAYLIST-SCHMIEDE (DEEP-SCAN SUBFOLDERS){W}")
-    
+
+    print(f"\n{B}{R}[RITUS IV] PLAYLIST-SCHMIEDE (INTERAKTIVE AUSWAHL){W}")
+
     if not os.path.exists(music_dir):
         print(f"{Y}[LOG] Der Musik-Schrein existiert noch nicht.{W}")
         return
 
-    detected_tracks = {}
+    # Alle MP3s finden und sortiert nummerieren
+    all_tracks = []
     for root, dirs, files in os.walk(music_dir):
-        for file in files:
+        for file in sorted(files):
             if file.endswith(".mp3"):
-                rel_path = os.path.relpath(os.path.join(root, file), music_dir)
-                detected_tracks[rel_path] = os.path.join(root, file)
+                abs_path = os.path.join(root, file)
+                rel_path = os.path.relpath(abs_path, music_dir)
+                all_tracks.append((rel_path, abs_path))
+    all_tracks.sort(key=lambda x: x[0])
 
-    if not detected_tracks:
-        print(f"{Y}[LOG] Keine installierten .mp3-Dateien gefunden.{W}")
+    if not all_tracks:
+        print(f"{Y}[LOG] Keine .mp3-Dateien im Schrein gefunden.{W}")
         return
 
-    print(f"{C}Gefundene Archiv-Einträge (Kopier-Vorlagen für die Liste):{W}")
-    for rel_path in sorted(detected_tracks.keys()):
-        print(f" -> {rel_path}")
+    # Alle Tracks nummeriert anzeigen
+    print(f"\n{C}{'─'*60}{W}")
+    print(f"{B}  ARCHIV-BIBLIOTHEK ({len(all_tracks)} Tracks){W}")
+    print(f"{C}{'─'*60}{W}")
+    for idx, (rel_path, _) in enumerate(all_tracks, 1):
+        # rel_path = "Kuenstler/Songname.mp3" → lesbar aufbereiten
+        parts = rel_path.replace("\\", "/").split("/")
+        if len(parts) == 2:
+            artist_display = parts[0]
+            title_display = parts[1].replace(".mp3", "")
+            print(f"  [{Y}{idx:>3}{W}] {B}{title_display}{W}  {C}({artist_display}){W}")
+        else:
+            print(f"  [{Y}{idx:>3}{W}] {rel_path.replace('.mp3','')}")
+    print(f"{C}{'─'*60}{W}")
 
-    if not os.path.exists(wishlist_path):
-        with open(wishlist_path, "w", encoding="utf-8") as f:
-            f.write("# Trage hier die Song-Pfade ein.\n")
-            f.write(f"# {list(detected_tracks.keys())[0]}\n")
-
-    print(f"\n{Y}[INFO] Steuerungsdatei bereitgestellt: {wishlist_path}{W}")
-    ready = input(f"{C}» Songs eingetragen und gespeichert? (y/ENTER zum Abbrechen): {W}").strip().lower()
-    if ready != 'y': return
-
-    selected_absolute_paths = []
-    with open(wishlist_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"): continue
-            if not line.endswith(".mp3"): line += ".mp3"
-            if line in detected_tracks:
-                selected_absolute_paths.append(detected_tracks[line])
-            else:
-                print(f"{Y}[WARNUNG] '{line}' nicht im Schrein! Überspringe...{W}")
-
-    if not selected_absolute_paths:
-        print(f"{R}[ABBRUCH] Liste leer.{W}")
-        return
-
-    playlist_name = input(f"\n{C}» Name der fertigen Playlist-Datei (z.B. MyMix): {W}").strip()
+    # Playlist-Name zuerst
+    playlist_name = input(f"\n{C}» Name der Playlist (ENTER = Auto-Name): {W}").strip()
     if not playlist_name:
-        playlist_name = f"Chronik_Mix_{datetime.now().strftime('%Y%m%d')}"
+        playlist_name = f"Chronik_Mix_{datetime.now().strftime('%Y%m%d_%H%M')}"
     playlist_name = get_safe_filename(playlist_name) + ".mp3"
 
+    # Nummern eingeben
+    print(f"\n{Y}Gib die Track-Nummern in der gewünschten Reihenfolge ein.")
+    print(f"Beispiel: {B}4, 7, 9, 1, 12{W}  oder  {B}4 7 9 1 12{W}")
+    print(f"Doppelte Nummern = Track mehrfach in Playlist.{W}")
+    raw = input(f"\n{B}{R}» Auswahl » {W}").strip()
+    if not raw:
+        print(f"{Y}[LOG] Keine Auswahl. Abbruch.{W}")
+        return
+
+    # Nummern parsen (Komma oder Leerzeichen als Trenner)
+    raw_tokens = re.split(r'[\s,]+', raw)
+    selected_paths = []
+    errors = []
+    for token in raw_tokens:
+        if not token: continue
+        if not token.isdigit():
+            errors.append(f"'{token}' ist keine Zahl")
+            continue
+        num = int(token)
+        if 1 <= num <= len(all_tracks):
+            selected_paths.append(all_tracks[num - 1])
+        else:
+            errors.append(f"{num} außerhalb des Bereichs (1–{len(all_tracks)})")
+
+    if errors:
+        for e in errors:
+            print(f"{Y}[WARNUNG] {e}{W}")
+
+    if not selected_paths:
+        print(f"{R}[ABBRUCH] Keine gültigen Tracks ausgewählt.{W}")
+        return
+
+    # Auswahl bestätigen
+    print(f"\n{C}{'─'*60}{W}")
+    print(f"{B}  PLAYLIST: {playlist_name}{W}")
+    print(f"{C}{'─'*60}{W}")
+    for i, (rel_path, _) in enumerate(selected_paths, 1):
+        parts = rel_path.replace("\\", "/").split("/")
+        if len(parts) == 2:
+            print(f"  {i:>2}. {B}{parts[1].replace('.mp3','')}{W}  {C}({parts[0]}){W}")
+        else:
+            print(f"  {i:>2}. {rel_path.replace('.mp3','')}")
+    print(f"{C}{'─'*60}{W}")
+    confirm = input(f"\n{Y}» Playlist so schmieden? (y/ENTER zum Abbrechen): {W}").strip().lower()
+    if confirm != 'y':
+        print(f"{Y}[LOG] Abgebrochen.{W}")
+        return
+
+    # ffmpeg concat
     os.makedirs(playlist_dir, exist_ok=True)
     output_path = os.path.join(playlist_dir, playlist_name)
     list_txt_path = os.path.join(music_dir, "temp_playlist_forge.txt")
-    
+
     try:
         with open(list_txt_path, "w", encoding="utf-8") as f:
-            for abs_path in selected_absolute_paths:
-                safe_abs_path = abs_path.replace("'", "'\\''")
+            for _, abs_path in selected_paths:
+                safe_abs_path = abs_path.replace("'", "\\'")
                 f.write(f"file '{safe_abs_path}'\n")
 
-        print(f"\n{Y}[LOG] Rufe ffmpeg-Demuxer auf... Ströme werden nahtlos geflochten...{W}")
-        cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0", 
-            "-i", list_txt_path, "-c", "copy", output_path
-        ]
-        
+        print(f"\n{Y}[LOG] ffmpeg fügt Tracks nahtlos zusammen...{W}")
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+               "-i", list_txt_path, "-c", "copy", output_path]
         process = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         if process.returncode == 0:
-            print(f"\n{G}✓ [ERFOLG] Playlist perfekt geschmiedet!{W}")
+            print(f"\n{G}✓ [ERFOLG] Playlist geschmiedet!{W}")
             print(f"{C}[PFAD] {output_path}{W}")
         else:
-            print(f"\n{R}[FEHLER] Kernschmelze: {process.stderr.decode()}{W}")
-            
+            print(f"\n{R}[FEHLER] {process.stderr.decode()}{W}")
     finally:
         if os.path.exists(list_txt_path): os.remove(list_txt_path)
 
@@ -697,7 +763,7 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v15.2 ::.
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v15.3 ::.
 """)
     print(f"{C}   [ Ein Lobpreis dem Omnissiah. Multi-OS Neural Core Online. ]")
     print(f"   [ System: {SYSTEM_OS.upper()}{' / ' + SYSTEM_DISTRO.upper() if SYSTEM_DISTRO else ''} | Aktueller Schrein: {current_vault} ]{W}\n")
@@ -708,7 +774,7 @@ def main():
         banner()
         print(f"[{R}01{W}] YouTube-Video akquirieren (Direkt-Link/Suche -> MP4)")
         print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen")
-        print(f"[{R}03{W}] Spotify-Link oder Suche (HQ-MP3 -> Sängerordner -> Unendliche Suche)")
+        print(f"[{R}03{W}] YouTube-Link / Spotify-Link / Suche  (HQ-MP3 -> Sängerordner)")
         print(f"[{R}04{W}] Playlist aus Sänger-Ordnern fusionieren (Langes MP3)")
         print(f"[{R}05{W}] Speicherort des Archiv-Schreins modifizieren")
         print(f"[{R}06{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")

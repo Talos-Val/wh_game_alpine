@@ -166,50 +166,48 @@ def download_twitch():
         print(f"{R}[KATASTROPHE] Ausfall: {e}{W}")
 
 # ==========================================
-# RITUS III: MUSIC HARVESTER (SPOTIFY-DECODER & INTERAKTIV)
+# RITUS III: MUSIC PLATFORM HARVESTER MAX (v14.0)
 # ==========================================
 def download_music_platform():
     YoutubeDL, requests = ensure_packages_and_import()
     ffmpeg_available = check_ffmpeg()
     vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (SPOTIFY & SEARCH v13.0){W}")
+    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (BOOSTED SEARCH v14.0){W}")
     user_input = input(f"{C}» Gib Interpret+Songname ODER Spotify-Link ein:\n» {W}").strip()
     if not user_input: return
 
     search_query = user_input
     artist_folder = "Unbekannter_Saenger"
 
-    # Logik zur Extraktion von Spotify-Metadaten
-    if "spotify.com" in user_input:
-        print(f"\n{Y}[LOG] Erkennen Spotify-Protokoll. Starte Metadaten-Extraktion...{W}")
+    # Hochpräzise Spotify-Parsing-Matrix
+    if "spotify.com" in user_input or "spotify.link" in user_input:
+        print(f"\n{Y}[LOG] Spotify-Protokoll erkannt. Extrahiere Metadaten-Kerne...{W}")
         try:
-            # Wir fordern die offizielle oEmbed-Schnittstelle von Spotify an
             sp_url = f"https://open.spotify.com/oembed?url={user_input}"
             response = requests.get(sp_url, headers=BROWN_GEAR_HEADERS, timeout=10)
+            
+            html_response = requests.get(user_input, headers=BROWN_GEAR_HEADERS, timeout=10)
+            artist_match = re.search(r'"artists":\[{"name":"([^"]+)"', html_response.text)
+            if not artist_match:
+                artist_match = re.search(r'<meta property="twitter:audio:artist_name" content="([^"]+)"', html_response.text)
+            
+            artist_name = artist_match.group(1) if artist_match else "Unbekannter_Saenger"
+            
             if response.status_code == 200:
                 data = response.json()
-                title = data.get("title", "")
+                song_title = data.get("title", "")
+                artist_folder = get_safe_filename(artist_name)
+                search_query = f"{artist_name} - {song_title}"
                 
-                # Spotify oEmbed gibt oft "Songname by Interpret" zurück
-                if " by " in title:
-                    song_name, artist_name = title.split(" by ", 1)
-                    artist_folder = get_safe_filename(artist_name)
-                    search_query = f"{artist_name} - {song_name}"
-                else:
-                    search_query = title
-                    # Falls kein "by" da ist, versuchen wir den Entitätstyp zu raten oder fragen nach
-                    artist_folder = get_safe_filename(data.get("provider_name", "Spotify_Release"))
-                
-                print(f"{G}[STATUS] Spotify-Matrix erfolgreich dekodiert!{W}")
-                print(f"{C}Gesuchter Track: {search_query}{W}")
+                print(f"{G}[STATUS] Spotify-Matrix erfolgreich entschlüsselt!{W}")
+                print(f"{C}Künstler: {artist_name} | Track: {song_title}{W}")
             else:
-                print(f"{Y}[WARNUNG] Spotify-Noosphäre blockiert direkten Zugriff. Schalte auf Roh-Suche.{W}")
+                print(f"{Y}[WARNUNG] oEmbed-Schnittstelle blockiert. Nutze Direkttext.{W}")
         except Exception as e:
-            print(f"{Y}[WARNUNG] Metadaten-Skript gestört ({e}). Nutze Eingabe als Text.{W}")
+            print(f"{Y}[WARNUNG] Fehler beim Auslesen ({e}). Verarbeite als Roh-Suchbegriff.{W}")
 
-    # Fallunterscheidung für reguläre Texteingaben ("Interpret - Song")
-    if "spotify.com" not in user_input:
+    if "spotify.com" not in user_input and "spotify.link" not in user_input:
         if " - " in user_input:
             artist_folder = get_safe_filename(user_input.split(" - ", 1)[0])
         else:
@@ -219,7 +217,10 @@ def download_music_platform():
 
     target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
     
-    print(f"\n{Y}[LOG] Durchsuche YouTube nach den 3 besten Treffern für '{search_query}'...{W}")
+    # SYSTEM-UPGRADE: Wir hängen präzise Filter-Keywords an, um offizielle Releases nach oben zu zwingen
+    boosted_search = f"{search_query} Official Audio OR Lyric Video OR Topic"
+    print(f"\n{Y}[LOG] Aktiviere Such-Verstärker. Scanne tiefenwirksam (20 Vektoren)...{W}")
+    
     search_opts = {
         'extract_flat': True,
         'quiet': True,
@@ -227,7 +228,7 @@ def download_music_platform():
         'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
     }
     
-    yt_search_string = f"ytsearch3:{search_query} audio"
+    yt_search_string = f"ytsearch20:{boosted_search}"
     
     try:
         with YoutubeDL(search_opts) as ydl:
@@ -235,42 +236,76 @@ def download_music_platform():
         
         entries = search_results.get('entries', [])
         if not entries:
-            print(f"{R}[STÖRUNG] Keine passenden Frequenzen auf YouTube lokalisiert.{W}")
+            print(f"{R}[STÖRUNG] Keine Frequenzen auf YouTube lokalisiert.{W}")
             return
+
+        # ==========================================
+        # INTERAKTIVES BLÄTTER-SYSTEM (20 TRÄCKS MAX)
+        # ==========================================
+        current_index = 0
+        page_size = 5
+        chosen_entry = None
+
+        while True:
+            print(f"\n{C}Gefundene YouTube-Vektoren (Einträge {current_index + 1} bis {min(current_index + page_size, len(entries))} von {len(entries)}):{W}")
             
-        print(f"\n{C}Gefundene YouTube-Vektoren zur Verifikation:{W}")
-        for idx, entry in enumerate(entries, 1):
-            title = entry.get('title', 'Unbekannter Titel')
-            uploader = entry.get('uploader', 'Unbekannter Kanal')
-            duration = entry.get('duration', 0)
+            for i in range(current_index, min(current_index + page_size, len(entries))):
+                entry = entries[i]
+                title = entry.get('title', 'Unbekannter Titel')
+                uploader = entry.get('uploader', 'Unbekannter Kanal')
+                duration = entry.get('duration', 0)
+                
+                minutes = int(duration // 60)
+                seconds = int(duration % 60)
+                duration_str = f"{minutes}:{seconds:02d}" if duration else "Unbekannt"
+                
+                display_num = (i - current_index) + 1
+                print(f" [{Y}{display_num}{W}] {B}{title}{W}")
+                print(f"     Kanal: {C}{uploader}{W} | Länge: {C}{duration_str}{W}")
+
+            if current_index + page_size < len(entries):
+                print(f"\n[{Y}m{W}] Mehr Ergebnisse anzeigen (weiterblättern)")
+            else:
+                print(f"\n[{Y}m{W}] Zurück zur ersten Seite springen")
+            print(f"[ENTER] Suche abbrechen")
             
-            minutes = int(duration // 60)
-            seconds = int(duration % 60)
-            duration_str = f"{minutes}:{seconds:02d}" if duration else "Unbekannt"
+            selection = input(f"\n{B}{R}Wähle Vektor (1-5) oder Binärbefehl » {W}").strip().lower()
             
-            print(f" [{Y}{idx}{W}] {B}{title}{W}")
-            print(f"     Kanal: {C}{uploader}{W} | Länge: {C}{duration_str}{W}")
+            if not selection:
+                print(f"{Y}[LOG] Suche abgebrochen.{W}")
+                return
+                
+            if selection == 'm':
+                if current_index + page_size < len(entries):
+                    current_index += page_size
+                else:
+                    print(f"\n{Y}[INFO] Signalkette schließt sich. Zurück auf Anfang.{W}")
+                    current_index = 0
+                continue
+                
+            if selection.isdigit():
+                num = int(selection)
+                if 1 <= num <= min(page_size, len(entries) - current_index):
+                    chosen_entry = entries[current_index + num - 1]
+                    break
+                else:
+                    print(f"{R}[STÖRUNG] Ungültiger Index für diese Sektion!{W}")
+            else:
+                print(f"{R}[STÖRUNG] Unbekannter Steuerbefehl!{W}")
+
+        if not chosen_entry:
+            return
+
+        chosen_video_url = chosen_entry.get('url') or f"https://www.youtube.com/watch?v={chosen_entry.get('id')}"
+        chosen_title = chosen_entry.get('title')
 
     except Exception as e:
         print(f"{R}[ABBRUCH] Fehlfunktion bei der Netz-Suche: {e}{W}")
         return
 
-    selection = input(f"\n{B}{R}Wähle den korrekten Vektor (1-{len(entries)}) oder ENTER zum Abbrechen » {W}").strip()
-    if not selection or not selection.isdigit():
-        print(f"{Y}[LOG] Abgebrochen.{W}")
-        return
-        
-    choice_idx = int(selection) - 1
-    if choice_idx < 0 or choice_idx >= len(entries):
-        print(f"{R}[STÖRUNG] Ungültiger Index!{W}")
-        return
-        
-    chosen_video_url = entries[choice_idx].get('url') or f"https://www.youtube.com/watch?v={entries[choice_idx].get('id')}"
-    chosen_title = entries[choice_idx].get('title')
-
     os.makedirs(target_dir, exist_ok=True)
     print(f"\n{G}[RIEGEL] Ziel verifiziert: '{chosen_title}'{W}")
-    print(f"{Y}[LOG] Starte Extraktion...{W}")
+    print(f"{Y}[LOG] Starte Extraktion des reinen Audio-Kerns...{W}")
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -290,7 +325,7 @@ def download_music_platform():
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([chosen_video_url])
-        print(f"\n{G}✓ [ERFOLG] Track im richtigen Sänger-Ordner versiegelt: {target_dir}/{W}")
+        print(f"\n{G}✓ [ERFOLG] Track im richtigen Sänger-Ordner versiegelt!{W}")
     except Exception as e:
         print(f"{R}[KATASTROPHE] Download fehlgeschlagen: {e}{W}")
 
@@ -392,9 +427,9 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v13.0 ::.
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v14.0 ::.
 """)
-    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Spotify-Link-Dechiffrierung online. ]")
+    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Boosted Indie-Search Online. ]")
     print(f"   [ Aktueller Schrein: {current_vault} ]{W}\n")
 
 def main():
@@ -403,7 +438,7 @@ def main():
         banner()
         print(f"[{R}01{W}] YouTube-Video akquirieren (Direkt-Link/Suche -> MP4)")
         print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen")
-        print(f"[{R}03{W}] Spotify-Link oder Suche (HQ-MP3 -> Sängerordner -> Verifiziert)")
+        print(f"[{R}03{W}] Spotify-Link oder Suche (HQ-MP3 -> Sängerordner -> Unendliche Suche)")
         print(f"[{R}04{W}] Playlist aus Sänger-Ordnern fusionieren (Langes MP3)")
         print(f"[{R}05{W}] Speicherort des Archiv-Schreins modifizieren")
         print(f"[{R}06{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")

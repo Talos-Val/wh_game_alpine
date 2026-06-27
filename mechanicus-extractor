@@ -303,29 +303,16 @@ def extract_spotify_metadata(user_input, requests):
         resp = requests.get(oembed_url, headers=BROWN_GEAR_HEADERS, timeout=10)
         if resp.status_code == 200:
             data = resp.json()
-            raw_title = data.get("title", "")
+            raw_title = data.get("title", "").strip()
             
-            # oEmbed title ist oft "Songname" (ohne Künstler)
-            # Aber manchmal "Songname · Künstler" oder "Songname - Künstler"
-            if " · " in raw_title:
-                parts = raw_title.split(" · ", 1)
-                song_title = parts[0].strip()
-                artist_name = parts[1].strip()
-            elif " - " in raw_title:
-                parts = raw_title.split(" - ", 1)
-                song_title = parts[0].strip()
-                artist_name = parts[1].strip()
-            else:
-                song_title = raw_title.strip()
-                # Künstler noch nicht bekannt, weiter zu Methode 2
-            
-            # Versuche Künstler aus dem HTML-Feld des oEmbed zu extrahieren
-            if not artist_name:
-                html_block = data.get("html", "")
-                # Spotify bettet den Künstler manchmal in das iframe-HTML ein
-                artist_match = re.search(r'(?:by|artist)["\s:]+([^"<&\n]+)', html_block, re.IGNORECASE)
-                if artist_match:
-                    artist_name = artist_match.group(1).strip()
+            # Spotify oEmbed title-Format ist MEISTENS: "Songname"
+            # Manchmal: "Künstler - Songname" (Künstler zuerst!)
+            # Selten: "Songname · Künstler"
+            # Wir behandeln raw_title erstmal nur als Songtitel-Kandidat,
+            # OHNE daraus einen Künstler zu extrahieren — das ist zu fehleranfällig.
+            # Der Künstler wird ausschließlich aus HTML/strukturierten Daten geholt.
+            song_title = raw_title  # Kandidat, wird ggf. durch HTML-Methoden überschrieben
+            # KEIN artist_name aus oEmbed-Titel ableiten — zu fehleranfällig!
     except Exception as e:
         print(f"{Y}[LOG] oEmbed-Methode nicht verfügbar: {e}{W}")
 
@@ -453,50 +440,65 @@ def download_music_platform():
         
         artist_name, song_title = extract_spotify_metadata(user_input, requests)
         
+        if song_title:
+            print(f"{G}[STATUS] Spotify-Titel erkannt: '{song_title}'{W}")
+        else:
+            print(f"{R}[WARNUNG] Kein Titel extrahierbar. Roheingabe wird genutzt.{W}")
+            song_title = input(f"{Y}» Song-Titel manuell eingeben: {W}").strip() or "Unbekannter_Track"
+
+        # Künstler IMMER manuell bestätigen — Automatik ist zu fehleranfällig
+        if artist_name:
+            print(f"{C}Erkannter Künstler: {B}{artist_name}{W}")
+            confirm = input(f"{Y}» Künstler korrekt? (ENTER = ja, oder neuen Namen eingeben): {W}").strip()
+            if confirm:
+                artist_name = confirm
+        else:
+            print(f"{Y}[WARNUNG] Künstler konnte nicht automatisch erkannt werden.{W}")
+            artist_name = input(f"{Y}» Künstler/Interpret für den Ordnernamen eingeben: {W}").strip()
+
+        artist_folder = get_safe_filename(artist_name) if artist_name else "Unbekannter_Saenger"
+        # Suchquery: Künstler + Titel zusammen — beide Infos für YouTube-Suche
+        # (Künstler ist jetzt vom Nutzer bestätigt, also zuverlässig)
         if artist_name and song_title:
-            artist_folder = get_safe_filename(artist_name)
-            search_query = f"{artist_name} - {song_title}"
-            print(f"{G}[STATUS] Spotify-Matrix erfolgreich entschlüsselt!{W}")
-            print(f"{C}Künstler: {artist_name} | Track: {song_title}{W}")
-        elif song_title:
-            search_query = song_title
-            print(f"{Y}[WARNUNG] Nur Titel erkannt ('{song_title}'). Bitte Künstler manuell bestätigen:{W}")
-            artist_input = input(f"{Y}» Künstler/Interpret für den Ordnernamen: {W}").strip()
-            if artist_input:
-                artist_folder = get_safe_filename(artist_input)
-                search_query = f"{artist_input} - {song_title}"
-            else:
-                artist_folder = "Unbekannter_Saenger"
+            search_query = f"{artist_name} {song_title}"
         else:
-            print(f"{R}[WARNUNG] Metadaten konnten nicht extrahiert werden. Verarbeite als Roheingabe.{W}")
-            artist_input = input(f"{Y}» Künstler für die Suche eingeben: {W}").strip()
-            if artist_input:
-                artist_folder = get_safe_filename(artist_input)
-                search_query = artist_input
+            search_query = song_title or artist_name or user_input
+        print(f"{C}[INFO] Suchquery: '{search_query}' | Ordner: '{artist_folder}'{W}")
     else:
-        # Kein Spotify-Link
+        # Kein Spotify-Link — Künstler und Titel explizit trennen
         if " - " in user_input:
-            artist_folder = get_safe_filename(user_input.split(" - ", 1)[0])
+            parts = user_input.split(" - ", 1)
+            artist_name = parts[0].strip()
+            song_title = parts[1].strip()
         else:
-            artist_input = input(f"{Y}» Welcher Sänger/Künstler ist das? (Für den Ordnernamen): {W}").strip()
-            if artist_input:
-                artist_folder = get_safe_filename(artist_input)
+            # Keine Trennzeichen → getrennt abfragen
+            print(f"{Y}[LOG] Kein 'Künstler - Titel' Format erkannt. Bitte getrennt eingeben.{W}")
+            artist_name = input(f"{C}» Künstler/Interpret: {W}").strip()
+            song_title = input(f"{C}» Songtitel: {W}").strip() or user_input
+
+        artist_folder = get_safe_filename(artist_name) if artist_name else "Unbekannter_Saenger"
+        # Suchquery: Künstler + Titel zusammen für präzise Ergebnisse
+        if artist_name and song_title:
+            search_query = f"{artist_name} {song_title}"
+        elif artist_name:
+            search_query = artist_name
+        else:
+            search_query = song_title or user_input
+        print(f"{C}[INFO] Suchquery: '{search_query}' | Ordner: '{artist_folder}'{W}")
 
     target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
-    
-    # SYSTEM-UPGRADE: Präzise Filter-Keywords für bessere Ergebnisse
-    boosted_search = f"{search_query} Official Audio OR Lyric Video OR Topic"
-    print(f"\n{Y}[LOG] Aktiviere Such-Verstärker. Scanne tiefenwirksam (20 Vektoren)...{W}")
-    print(f"{C}[SUCHE] Query: {search_query}{W}")
-    
+
+    print(f"\n{Y}[LOG] Starte YouTube-Suche (20 Vektoren)...{W}")
+    print(f"{C}[SUCHE] Query: '{search_query}'{W}")
+
     search_opts = {
         'extract_flat': True,
         'quiet': True,
         'http_headers': BROWN_GEAR_HEADERS,
         'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
     }
-    
-    yt_search_string = f"ytsearch20:{boosted_search}"
+
+    yt_search_string = f"ytsearch20:{search_query}"
     
     try:
         with YoutubeDL(search_opts) as ydl:
@@ -695,7 +697,7 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v15.0 ::.
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v15.2 ::.
 """)
     print(f"{C}   [ Ein Lobpreis dem Omnissiah. Multi-OS Neural Core Online. ]")
     print(f"   [ System: {SYSTEM_OS.upper()}{' / ' + SYSTEM_DISTRO.upper() if SYSTEM_DISTRO else ''} | Aktueller Schrein: {current_vault} ]{W}\n")

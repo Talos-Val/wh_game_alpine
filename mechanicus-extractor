@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import json
+import re
 from datetime import datetime
 
 CONFIG_FILE = os.path.expanduser("~/.mechanicus_cfg.json")
@@ -165,28 +166,60 @@ def download_twitch():
         print(f"{R}[KATASTROPHE] Ausfall: {e}{W}")
 
 # ==========================================
-# RITUS III: MUSIC HARVESTER MIT SÄNGERORDNER & VERIFIKATION
+# RITUS III: MUSIC HARVESTER (SPOTIFY-DECODER & INTERAKTIV)
 # ==========================================
 def download_music_platform():
-    YoutubeDL, _ = ensure_packages_and_import()
+    YoutubeDL, requests = ensure_packages_and_import()
     ffmpeg_available = check_ffmpeg()
     vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (VERIFIED SEARCH){W}")
-    user_input = input(f"{C}» Gib Interpret + Songname ein (z.B. MAILE - Bubblegum):\n» {W}").strip()
+    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (SPOTIFY & SEARCH v13.0){W}")
+    user_input = input(f"{C}» Gib Interpret+Songname ODER Spotify-Link ein:\n» {W}").strip()
     if not user_input: return
 
+    search_query = user_input
     artist_folder = "Unbekannter_Saenger"
-    if " - " in user_input:
-        artist_folder = get_safe_filename(user_input.split(" - ", 1)[0])
-    else:
-        artist_input = input(f"{Y}» Welcher Sänger/Künstler ist das? (Für den Ordnernamen): {W}").strip()
-        if artist_input:
-            artist_folder = get_safe_filename(artist_input)
+
+    # Logik zur Extraktion von Spotify-Metadaten
+    if "spotify.com" in user_input:
+        print(f"\n{Y}[LOG] Erkennen Spotify-Protokoll. Starte Metadaten-Extraktion...{W}")
+        try:
+            # Wir fordern die offizielle oEmbed-Schnittstelle von Spotify an
+            sp_url = f"https://open.spotify.com/oembed?url={user_input}"
+            response = requests.get(sp_url, headers=BROWN_GEAR_HEADERS, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                title = data.get("title", "")
+                
+                # Spotify oEmbed gibt oft "Songname by Interpret" zurück
+                if " by " in title:
+                    song_name, artist_name = title.split(" by ", 1)
+                    artist_folder = get_safe_filename(artist_name)
+                    search_query = f"{artist_name} - {song_name}"
+                else:
+                    search_query = title
+                    # Falls kein "by" da ist, versuchen wir den Entitätstyp zu raten oder fragen nach
+                    artist_folder = get_safe_filename(data.get("provider_name", "Spotify_Release"))
+                
+                print(f"{G}[STATUS] Spotify-Matrix erfolgreich dekodiert!{W}")
+                print(f"{C}Gesuchter Track: {search_query}{W}")
+            else:
+                print(f"{Y}[WARNUNG] Spotify-Noosphäre blockiert direkten Zugriff. Schalte auf Roh-Suche.{W}")
+        except Exception as e:
+            print(f"{Y}[WARNUNG] Metadaten-Skript gestört ({e}). Nutze Eingabe als Text.{W}")
+
+    # Fallunterscheidung für reguläre Texteingaben ("Interpret - Song")
+    if "spotify.com" not in user_input:
+        if " - " in user_input:
+            artist_folder = get_safe_filename(user_input.split(" - ", 1)[0])
+        else:
+            artist_input = input(f"{Y}» Welcher Sänger/Künstler ist das? (Für den Ordnernamen): {W}").strip()
+            if artist_input:
+                artist_folder = get_safe_filename(artist_input)
 
     target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
     
-    print(f"\n{Y}[LOG] Infiltriere Noosphäre... Suche nach den 3 besten Audio-Frequenzen...{W}")
+    print(f"\n{Y}[LOG] Durchsuche YouTube nach den 3 besten Treffern für '{search_query}'...{W}")
     search_opts = {
         'extract_flat': True,
         'quiet': True,
@@ -194,18 +227,18 @@ def download_music_platform():
         'user_agent': BROWN_GEAR_HEADERS['User-Agent'],
     }
     
-    search_query = f"ytsearch3:{user_input} audio"
+    yt_search_string = f"ytsearch3:{search_query} audio"
     
     try:
         with YoutubeDL(search_opts) as ydl:
-            search_results = ydl.extract_info(search_query, download=False)
+            search_results = ydl.extract_info(yt_search_string, download=False)
         
         entries = search_results.get('entries', [])
         if not entries:
-            print(f"{R}[STÖRUNG] Keine Treffer für diese Frequenz gefunden.{W}")
+            print(f"{R}[STÖRUNG] Keine passenden Frequenzen auf YouTube lokalisiert.{W}")
             return
             
-        print(f"\n{C}Gefundene YouTube-Vektoren für deine Anfrage:{W}")
+        print(f"\n{C}Gefundene YouTube-Vektoren zur Verifikation:{W}")
         for idx, entry in enumerate(entries, 1):
             title = entry.get('title', 'Unbekannter Titel')
             uploader = entry.get('uploader', 'Unbekannter Kanal')
@@ -219,7 +252,7 @@ def download_music_platform():
             print(f"     Kanal: {C}{uploader}{W} | Länge: {C}{duration_str}{W}")
 
     except Exception as e:
-        print(f"{R}[ABBRUCH] Fehlfunktion bei der Suche: {e}{W}")
+        print(f"{R}[ABBRUCH] Fehlfunktion bei der Netz-Suche: {e}{W}")
         return
 
     selection = input(f"\n{B}{R}Wähle den korrekten Vektor (1-{len(entries)}) oder ENTER zum Abbrechen » {W}").strip()
@@ -237,7 +270,7 @@ def download_music_platform():
 
     os.makedirs(target_dir, exist_ok=True)
     print(f"\n{G}[RIEGEL] Ziel verifiziert: '{chosen_title}'{W}")
-    print(f"{Y}[LOG] Starte Extraktion des reinen Audio-Kerns...{W}")
+    print(f"{Y}[LOG] Starte Extraktion...{W}")
 
     ydl_opts = {
         'format': 'bestaudio/best',
@@ -257,15 +290,14 @@ def download_music_platform():
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([chosen_video_url])
-        print(f"\n{G}✓ [ERFOLG] Track exakt abgelegt in: {target_dir}/{W}")
+        print(f"\n{G}✓ [ERFOLG] Track im richtigen Sänger-Ordner versiegelt: {target_dir}/{W}")
     except Exception as e:
         print(f"{R}[KATASTROPHE] Download fehlgeschlagen: {e}{W}")
 
 # ==========================================
-# RITUS IV: PLAYLIST SYNTHESIZER (DEEP-SCAN SUBFOLDERS)
+# RITUS IV: PLAYLIST SYNTHESIZER
 # ==========================================
 def synthesize_playlist():
-    """Ritus IV: Scannt Sänger-Unterordner und verarbeitet die Wunschliste fehlerfrei"""
     if not check_ffmpeg(): return
     vault_dir = load_vault_dir()
     music_dir = f"{vault_dir}/Music_Schrein"
@@ -286,7 +318,7 @@ def synthesize_playlist():
                 detected_tracks[rel_path] = os.path.join(root, file)
 
     if not detected_tracks:
-        print(f"{Y}[LOG] Keine installierten .mp3-Dateien in den Sänger-Ordnern gefunden.{W}")
+        print(f"{Y}[LOG] Keine installierten .mp3-Dateien gefunden.{W}")
         return
 
     print(f"{C}Gefundene Archiv-Einträge (Kopier-Vorlagen für die Liste):{W}")
@@ -295,8 +327,7 @@ def synthesize_playlist():
 
     if not os.path.exists(wishlist_path):
         with open(wishlist_path, "w", encoding="utf-8") as f:
-            f.write("# Trage hier die Song-Pfade exakt so ein, wie sie oben stehen (einer pro Zeile).\n")
-            f.write("# Beispiel:\n")
+            f.write("# Trage hier die Song-Pfade ein.\n")
             f.write(f"# {list(detected_tracks.keys())[0]}\n")
 
     print(f"\n{Y}[INFO] Steuerungsdatei bereitgestellt: {wishlist_path}{W}")
@@ -307,24 +338,16 @@ def synthesize_playlist():
     with open(wishlist_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            
-            if not line.endswith(".mp3"):
-                line += ".mp3"
-
+            if not line or line.startswith("#"): continue
+            if not line.endswith(".mp3"): line += ".mp3"
             if line in detected_tracks:
                 selected_absolute_paths.append(detected_tracks[line])
             else:
-                print(f"{Y}[WARNUNG] '{line}' nicht im Schrein lokalisiert! Überspringe...{W}")
+                print(f"{Y}[WARNUNG] '{line}' nicht im Schrein! Überspringe...{W}")
 
     if not selected_absolute_paths:
-        print(f"{R}[ABBRUCH] Keine gültigen Tracks in der Wunschliste gefunden.{W}")
+        print(f"{R}[ABBRUCH] Liste leer.{W}")
         return
-
-    print(f"\n{G}[LOG] Folgende Songs werden verschmolzen:{W}")
-    for s in selected_absolute_paths: 
-        print(f" - {os.path.basename(s)}")
 
     playlist_name = input(f"\n{C}» Name der fertigen Playlist-Datei (z.B. MyMix): {W}").strip()
     if not playlist_name:
@@ -333,13 +356,11 @@ def synthesize_playlist():
 
     os.makedirs(playlist_dir, exist_ok=True)
     output_path = os.path.join(playlist_dir, playlist_name)
-
     list_txt_path = os.path.join(music_dir, "temp_playlist_forge.txt")
     
     try:
         with open(list_txt_path, "w", encoding="utf-8") as f:
             for abs_path in selected_absolute_paths:
-                # Sicherer String-Escape außerhalb des f-Strings gelöst, um SyntaxErrors zu verbannen
                 safe_abs_path = abs_path.replace("'", "'\\''")
                 f.write(f"file '{safe_abs_path}'\n")
 
@@ -350,16 +371,14 @@ def synthesize_playlist():
         ]
         
         process = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-        
         if process.returncode == 0:
-            print(f"\n{G}✓ [ERFOLG] Die multi-strukturelle Playlist-Kapsel wurde geschmiedet!{W}")
+            print(f"\n{G}✓ [ERFOLG] Playlist perfekt geschmiedet!{W}")
             print(f"{C}[PFAD] {output_path}{W}")
         else:
-            print(f"\n{R}[FEHLER] Ffmpeg-Kollaps: {process.stderr.decode()}{W}")
+            print(f"\n{R}[FEHLER] Kernschmelze: {process.stderr.decode()}{W}")
             
     finally:
-        if os.path.exists(list_txt_path):
-            os.remove(list_txt_path)
+        if os.path.exists(list_txt_path): os.remove(list_txt_path)
 
 def get_safe_filename(text):
     return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
@@ -373,9 +392,9 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v12.6 ::.
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v13.0 ::.
 """)
-    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Maschinencode stabilisiert. ]")
+    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Spotify-Link-Dechiffrierung online. ]")
     print(f"   [ Aktueller Schrein: {current_vault} ]{W}\n")
 
 def main():
@@ -384,29 +403,20 @@ def main():
         banner()
         print(f"[{R}01{W}] YouTube-Video akquirieren (Direkt-Link/Suche -> MP4)")
         print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen")
-        print(f"[{R}03{W}] Songs nach Sänger sortiert downloaden (Mit Verifikation)")
+        print(f"[{R}03{W}] Spotify-Link oder Suche (HQ-MP3 -> Sängerordner -> Verifiziert)")
         print(f"[{R}04{W}] Playlist aus Sänger-Ordnern fusionieren (Langes MP3)")
         print(f"[{R}05{W}] Speicherort des Archiv-Schreins modifizieren")
         print(f"[{R}06{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")
         
         choice = input(f"\n{B}{R}Gib heiligen Binärbefehl ein » {W}").strip()
         
-        if choice in ["1", "01"]:
-            download_youtube()
-        elif choice in ["2", "02"]:
-            download_twitch()
-        elif choice in ["3", "03"]:
-            download_music_platform()
-        elif choice in ["4", "04"]:
-            synthesize_playlist()
-        elif choice in ["5", "05"]:
-            change_vault_setting()
-        elif choice in ["6", "06"]:
-            print(f"\n{Y}[STASIS] Fahre Logik-Kogitatoren herunter. Der Omnissiah beschützt.{W}\n")
-            sys.exit()
-        else:
-            print(f"{R}[STÖRUNG] Unbekannter Binärcode!{W}")
-            
+        if choice in ["1", "01"]: download_youtube()
+        elif choice in ["2", "02"]: download_twitch()
+        elif choice in ["3", "03"]: download_music_platform()
+        elif choice in ["4", "04"]: synthesize_playlist()
+        elif choice in ["5", "05"]: change_vault_setting()
+        elif choice in ["6", "06"]: sys.exit()
+        
         if choice in ["1", "01", "2", "02", "3", "03", "4", "04", "5", "05"]:
             input(f"\n{C}Drücke ENTER zum Fortfahren...{W}")
 

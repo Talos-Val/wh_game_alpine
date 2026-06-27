@@ -3,7 +3,7 @@ sudo curl -s https://raw.githubusercontent.com/Talos-Val/linux_tools/main/instal
 after that
 sudo chmod +x /usr/local/bin/installupdate
 after that
-installupdate
+sudo installupdate
 after that
 installer --install
 If you have Ideas, write them in the Ideas.md

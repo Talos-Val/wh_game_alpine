@@ -7,87 +7,6 @@ from datetime import datetime
 
 CONFIG_FILE = os.path.expanduser("~/.mechanicus_cfg.json")
 
-# ==========================================
-# KONFIGURATIONS-VERWALTUNG
-# ==========================================
-def load_vault_dir():
-    # Standardpfad falls keine Config existiert
-    default_dir = os.path.join(os.getcwd(), "Omnissiah_Data_Vault")
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-                return cfg.get("vault_dir", default_dir)
-        except:
-            return default_dir
-    return default_dir
-
-def save_vault_dir(new_dir):
-    try:
-        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump({"vault_dir": new_dir}, f, indent=4)
-        print(f"\033[32m✓ [SYSTEM] Pfad permanent im Datenskript versiegelt: {new_dir}\033[0m")
-    except Exception as e:
-        print(f"\033[31m[FEHLER] Konfiguration konnte nicht geschrieben werden: {e}\033[0m")
-
-def change_vault_setting():
-    print(f"\n\033[1m\033[31m[RITUS IV] MODIFIKATION DES ARCHIV-SCHREINS\033[0m")
-    current = load_vault_dir()
-    print(f"\033[36mAktueller Pfad: {current}\033[0m")
-    print("\033[33mTipp: Absolute Pfade nutzen, z.B. /mnt/c/Users/PC/Downloads/MeinVault oder /home/titus/vault\033[0m")
-    
-    new_path = input("\033[36m» Gib den neuen Ziel-Pfad ein (ENTER zum Abbrechen): \033[0m").strip()
-    if not new_path:
-        return
-        
-    # Versuche den Ordner direkt zu erstellen um Validität zu prüfen
-    try:
-        os.makedirs(new_path, exist_ok=True)
-        save_vault_dir(new_path)
-    except Exception as e:
-        print(f"\033[31m[FEHLER] Pfad ungültig oder keine Rechte: {e}\033[0m")
-
-# ==========================================
-# SEGNETER INSTALLATIONS-RITUS
-# ==========================================
-def install_dependencies():
-    required_packages = {
-        "yt_dlp": "yt-dlp",
-        "requests": "requests"
-    }
-    missing_packages = []
-    
-    for module_name, pip_name in required_packages.items():
-        try:
-            __import__(module_name)
-        except ImportError:
-            missing_packages.append(pip_name)
-            
-    if missing_packages:
-        print("\033[33m[LITURGIE] Fehlende Maschinengeist-Komponenten erkannt.\033[0m")
-        print(f"\033[36mStarte autarken Salbungs-Ritus für: {', '.join(missing_packages)}...\033[0m")
-        try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages"] + missing_packages)
-            print("\033[32m[STATUS] Initialisierung abgeschlossen. Komponenten mit heiligen Ölen gesalbt.\033[0m\n")
-            
-            user_site = os.path.expanduser("~/.local/lib/python" + ".".join(sys.version.split(".")[:2]) + "/site-packages")
-            if user_site not in sys.path:
-                sys.path.insert(0, user_site)
-        except Exception as e:
-            print(f"\033[31m[KATASTROPHE] Ritus fehlgeschlagen: {e}\033[0m")
-            sys.exit(1)
-
-    if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
-        print("\033[33m[WARNUNG] 'ffmpeg'-Kogitator fehlt im System-Schrein!\033[0m")
-        print("\033[33mAudio- und Videospuren können nicht zu einer einzelnen Kapsel verschmolzen werden.\033[0m")
-        print("\033[36mAbhilfe: Nach Exekution 'sudo apt install ffmpeg' in die Shell hämmern.\033[0m\n")
-        input("Bestätige die Kenntnisnahme mit ENTER, um fortzufahren...")
-
-install_dependencies()
-
-from yt_dlp import YoutubeDL
-import requests
-
 # Sakrale Farb-Codes für das Adeptus-Interface
 R = "\033[31m"    # Mars-Rot
 G = "\033[32m"    # Tech-Grün
@@ -104,53 +23,104 @@ BROWN_GEAR_HEADERS = {
     'Upgrade-Insecure-Requests': '1'
 }
 
-def banner():
-    os.system('clear' if os.name == 'posix' else 'cls')
-    current_vault = load_vault_dir()
-    print(r"""
-█████╗ ██████╗ ███████╗██████╗ ████████╗██╗   ██╗███████╗
-██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
-███████║██║  ██║█████╗  ██████╔╝   ██║   ██║   ██║███████╗
-██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
-██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
-╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v6.0 ::.
-""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Totale Netz-Tarnung aktiv. ]\n"
-      f"   [ Aktueller Schrein: {current_vault} ]\n"
-      f"   [ Chrono-Logik: {datetime.now().strftime('%Y-%m-%d')} ]{W}\n")
+# ==========================================
+# KONFIGURATIONS-VERWALTUNG
+# ==========================================
+def load_vault_dir():
+    default_dir = os.path.join(os.getcwd(), "Omnissiah_Data_Vault")
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                return cfg.get("vault_dir", default_dir)
+        except:
+            return default_dir
+    return default_dir
 
-def get_safe_filename(text):
-    return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
+def save_vault_dir(new_dir):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"vault_dir": new_dir}, f, indent=4)
+        print(f"{G}✓ [SYSTEM] Pfad permanent im Datenskript versiegelt: {new_dir}{W}")
+    except Exception as e:
+        print(f"{R}[FEHLER] Konfiguration konnte nicht geschrieben werden: {e}{W}")
 
+def change_vault_setting():
+    print(f"\n{B}{R}[RITUS IV] MODIFIKATION DES ARCHIV-SCHREINS{W}")
+    current = load_vault_dir()
+    print(f"{C}Aktueller Pfad: {current}{W}")
+    print(f"{Y}Tipp: Nutze Pfade wie /mnt/c/Users/PC/Desktop/MeinVault{W}")
+    
+    new_path = input(f"{C}» Gib den neuen Ziel-Pfad ein (ENTER zum Abbrechen): {W}").strip()
+    if not new_path:
+        return
+        
+    try:
+        os.makedirs(new_path, exist_ok=True)
+        save_vault_dir(new_path)
+    except Exception as e:
+        print(f"{R}[FEHLER] Pfad ungültig oder keine Rechte: {e}{W}")
+
+# ==========================================
+# DYNAMISCHER LADUNGS-RITUS
+# ==========================================
+def ensure_packages_and_import():
+    """Sorgt dafür, dass Pakete da sind und importiert sie erst im Bedarfsfall"""
+    required_packages = {"yt_dlp": "yt-dlp", "requests": "requests"}
+    missing = []
+    for module_name, pip_name in required_packages.items():
+        try:
+            __import__(module_name)
+        except ImportError:
+            missing.append(pip_name)
+            
+    if missing:
+        print(f"{Y}[LITURGIE] Benötige zusätzliche Maschinengeist-Komponenten...{W}")
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages"] + missing)
+            user_site = os.path.expanduser("~/.local/lib/python" + ".".join(sys.version.split(".")[:2]) + "/site-packages")
+            if user_site not in sys.path:
+                sys.path.insert(0, user_site)
+            print(f"{G}[STATUS] Komponenten erfolgreich gesalbt.{W}\n")
+        except Exception as e:
+            print(f"{R}[KATASTROPHE] Autarke Installation fehlgeschlagen. Bitte manuell 'pip install yt-dlp requests --break-system-packages' ausführen.{W}")
+            sys.exit(1)
+
+    # Sichere Inline-Importe
+    from yt_dlp import YoutubeDL
+    import requests
+    return YoutubeDL, requests
+
+def check_ffmpeg():
+    if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+        print(f"{Y}[WARNUNG] 'ffmpeg'-Kogitator fehlt im System-Schrein!{W}")
+        print(f"{Y}Video/Audio-Fusionierung könnte fehlschlagen.{W}")
+
+# ==========================================
+# AKTIONEN
+# ==========================================
 def download_youtube():
+    YoutubeDL, _ = ensure_packages_and_import()
+    check_ffmpeg()
     vault_dir = load_vault_dir()
+    
     print(f"\n{B}{R}[RITUS I] COGNITION DES YOUTUBE-CHRONIKEN{W}")
     url = input(f"{C}» Reiche die heilige YouTube-Daten-URL ein: {W}").strip()
     if not url: return
 
     print(f"\n{Y}[LOG] Initiiere Infiltration mit Noosphären-Signatur...{W}")
-    
-    ydl_opts_meta = {
-        'quiet': True,
-        'http_headers': BROWN_GEAR_HEADERS,
-        'user_agent': BROWN_GEAR_HEADERS['User-Agent']
-    }
-
     try:
-        with YoutubeDL(ydl_opts_meta) as ydl:
+        with YoutubeDL({'quiet': True, 'http_headers': BROWN_GEAR_HEADERS, 'user_agent': BROWN_GEAR_HEADERS['User-Agent']}) as ydl:
             info = ydl.extract_info(url, download=False)
             creator = get_safe_filename(info.get('uploader', 'Unbekannter_Creator'))
             title = get_safe_filename(info.get('title', 'Unbenanntes_Video'))
     except Exception as e:
-        print(f"{R}[STÖRUNG] Maschinengeist verweigert die Metadaten-Analyse: {e}{W}")
+        print(f"{R}[STÖRUNG] Metadaten-Analyse fehlgeschlagen: {e}{W}")
         return
 
     target_dir = f"{vault_dir}/YouTube_Archive/{creator}"
     os.makedirs(target_dir, exist_ok=True)
     
-    print(f"{G}[LOG] Daten-Schrein lokalisiert: {target_dir}/{W}")
-    print(f"{C}[LOG] Sauge Datenstrom ab: '{title}'...{W}\n")
-
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
         'outtmpl': f'{target_dir}/{title}.%(ext)s',
@@ -163,40 +133,32 @@ def download_youtube():
     try:
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        print(f"\n{G}✓ [RIEGEL] Datenstrom versiegt. Kapsel im Schrein versiegelt.{W}")
+        print(f"\n{G}✓ [RIEGEL] Kapsel im Schrein versiegelt.{W}")
     except Exception as e:
-        print(f"{R}[ABBRUCH] Daten-Fragmentierung während des Saugens: {e}{W}")
+        print(f"{R}[ABBRUCH] Saug-Vorgang unterbrochen: {e}{W}")
 
 def download_twitch():
+    YoutubeDL, _ = ensure_packages_and_import()
     vault_dir = load_vault_dir()
+    
     print(f"\n{B}{R}[RITUS II] TRANSMISSION DES TWITCH-LIVE-STREAMS{W}")
     url = input(f"{C}» Gib die Frequenz des Senders ein (Kanal-URL): {W}").strip()
     if not url: return
 
-    print(f"\n{Y}[LOG] Identifiziere Sender-Subjekt via Noosphäre...{W}")
-    
-    ydl_opts_meta = {
-        'quiet': True,
-        'http_headers': BROWN_GEAR_HEADERS,
-        'user_agent': BROWN_GEAR_HEADERS['User-Agent']
-    }
-
     try:
-        with YoutubeDL(ydl_opts_meta) as ydl:
+        with YoutubeDL({'quiet': True, 'http_headers': BROWN_GEAR_HEADERS, 'user_agent': BROWN_GEAR_HEADERS['User-Agent']}) as ydl:
             info = ydl.extract_info(url, download=False)
             streamer = get_safe_filename(info.get('uploader', 'Unbekannter_Streamer'))
             title = get_safe_filename(info.get('title', 'Stream_Archiv'))
     except Exception as e:
-        print(f"{R}[STÖRUNG] Frequenz konnte nicht dekodiert werden: {e}{W}")
+        print(f"{R}[STÖRUNG] Frequenz-Dekodierung fehlgeschlagen: {e}{W}")
         return
 
     today = datetime.now().strftime('%Y-%m-%d')
     target_dir = f"{vault_dir}/Twitch_Streams/{streamer}/{today}"
     os.makedirs(target_dir, exist_ok=True)
 
-    print(f"{G}[LOG] Matrix initialisiert unter: {target_dir}/{W}")
-    print(f"{Y}[LOG] Starte Abfang-Ritus von Sekunde 0.{W}")
-    print(f"{R}[ACHTUNG] Drücke [STRG+C] um die Aufzeichnung rituell zu kappen und zu sichern!{W}\n")
+    print(f"{R}[ACHTUNG] [STRG+C] drücken, um die Aufzeichnung zu speichern!{W}\n")
 
     ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
@@ -211,40 +173,33 @@ def download_twitch():
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
     except KeyboardInterrupt:
-        print(f"\n{G}✓ [RIEGEL] Datenstrom auf Anwenderbefehl gekappt. Fragment erfolgreich gesichert.{W}")
+        print(f"\n{G}✓ [RIEGEL] Datenstrom gekappt. Fragment gesichert.{W}")
     except Exception as e:
-        print(f"{R}[KATASTROPHE] Ausfall des Aufzeichnungs-Schaltkreises: {e}{W}")
+        print(f"{R}[KATASTROPHE] Ausfall des Systems: {e}{W}")
 
 def reddit_deep_scraper():
+    _, requests = ensure_packages_and_import()
     vault_dir = load_vault_dir()
+    
     print(f"\n{B}{R}[RITUS III] EXZERPTION DES SUBREDDIT-DENKARCHIVS{W}")
     subreddit = input(f"{C}» Welches Subreddit soll exhumiert werden? {W}").strip()
     if not subreddit: return
 
     safe_sub = get_safe_filename(subreddit)
     today = datetime.now().strftime('%Y-%m-%d')
-    
-    sub_dir = f"{vault_dir}/Reddit_Archives/{safe_sub}"
-    target_dir = f"{sub_dir}/{today}"
+    target_dir = f"{vault_dir}/Reddit_Archives/{safe_sub}/{today}"
     os.makedirs(target_dir, exist_ok=True)
 
     url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=15"
 
-    print(f"\n{Y}[LOG] Sende getarnte Daten-Sonden in die Tiefen von Reddit...{W}")
+    print(f"\n{Y}[LOG] Sende getarnte Daten-Sonden zu Reddit...{W}")
     try:
         res = requests.get(url, headers=BROWN_GEAR_HEADERS, timeout=10)
         if res.status_code != 200:
-            print(f"{R}[ABWEHR] Die Server blockieren unsere Sonden (Code {res.status_code}).{W}")
+            print(f"{R}[ABWEHR] Zugriff verweigert (Code {res.status_code}).{W}")
             return
             
         posts = res.json()['data']['children']
-        
-        if not posts:
-            print(f"{Y}[LOG] Keine Datensätze im angegebenen Sektor gefunden.{W}")
-            return
-
-        print(f"{G}[LOG] Verbindung stabil. Extrahiere 15 Datenkapseln...{W}\n")
-
         for idx, post in enumerate(posts, 1):
             data = post['data']
             title = data.get('title', f"post_{idx}")
@@ -254,49 +209,43 @@ def reddit_deep_scraper():
             post_dir = f"{target_dir}/{idx:02d}_{clean_title}"
             os.makedirs(post_dir, exist_ok=True)
             
-            print(f"{C}[KOGITATOR {idx:02d}/15]{W} Archiviere Segment: {title[:45]}...")
-            
-            post_text = data.get('selftext', '[Kein Textinhalt - Nur Bild/Link]')
-            author = data.get('author', 'Unbekannt')
-            score = data.get('score', 0)
+            print(f"{C}[KOGITATOR {idx:02d}/15]{W} Archiviere: {title[:45]}...")
             
             with open(f"{post_dir}/beitrag.txt", "w", encoding="utf-8") as f:
                 f.write(f"PROTOKOLL-TITEL: {title}\n")
-                f.write(f"URHEBER-SIGNATUR: {author} | SCORE-REPUTATION: {score}\n")
-                f.write("=" * 60 + "\n\n")
-                f.write(post_text)
+                f.write(f"URHEBER: {data.get('author')} | SCORE: {data.get('score')}\n\n")
+                f.write(data.get('selftext', '[Kein Text]'))
 
-            media_url = data.get('url', '')
-            if any(media_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
+            # Medien-Download
+            m_url = data.get('url', '')
+            if any(m_url.endswith(ext) for ext in ['.jpg', '.jpeg', '.png', '.gif']):
                 try:
-                    ext = media_url.split('.')[-1]
-                    img_data = requests.get(media_url, headers=BROWN_GEAR_HEADERS, timeout=5).content
+                    ext = m_url.split('.')[-1]
+                    img_data = requests.get(m_url, headers=BROWN_GEAR_HEADERS, timeout=5).content
                     with open(f"{post_dir}/bild.{ext}", 'wb') as img_file:
                         img_file.write(img_data)
-                except:
-                    pass
-
-            comments_url = f"https://www.reddit.com/r/{subreddit}/comments/{post_id}.json?limit=10"
-            try:
-                comments_res = requests.get(comments_url, headers=BROWN_GEAR_HEADERS, timeout=5).json()
-                comments_list = comments_res[1]['data']['children']
-                
-                with open(f"{post_dir}/kommentare.txt", "w", encoding="utf-8") as f:
-                    f.write(f"--- ANALYSIERTE MEINUNGSSTRÖME (TOP KOMMENTARE) ---\n\n")
-                    for c_idx, comment in enumerate(comments_list, 1):
-                        c_data = comment.get('data', {})
-                        c_author = c_data.get('author', 'Unbekannt')
-                        c_body = c_data.get('body', '')
-                        if c_body:
-                            f.write(f"[{c_idx:02d}] Adept-Signatur: {c_author}\n")
-                            f.write(f"      Logik-Daten: {c_body}\n")
-                            f.write("." * 50 + "\n")
-            except:
-                pass
-
-        print(f"\n{G}✓ [STATUS] Alle 15 Kapseln wurden im Schrein '{target_dir}/' abgelegt.{W}")
+                except: pass
+        print(f"\n{G}✓ [STATUS] Exhumierung abgeschlossen.{W}")
     except Exception as e:
-        print(f"{R}[KATASTROPHE] Noosphären-Verbindungsabbruch während Exhumierung: {e}{W}")
+        print(f"{R}[KATASTROPHE] Fehler: {e}{W}")
+
+def get_safe_filename(text):
+    return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
+
+def banner():
+    os.system('clear' if os.name == 'posix' else 'cls')
+    current_vault = load_vault_dir()
+    print(r"""
+█████╗ ██████╗ ███████╗██████╗ ████████╗██╗   ██╗███████╗
+██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
+███████║██║  ██║█████╗  ██████╔╝   ██║   ██║   ██║███████╗
+██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
+██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
+╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v6.1 ::.
+""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Maschinensicht getarnt. ]\n"
+      f"   [ Aktueller Schrein: {current_vault} ]\n"
+      f"   [ Chrono-Logik: {datetime.now().strftime('%Y-%m-%d')} ]{W}\n")
 
 def main():
     while True:

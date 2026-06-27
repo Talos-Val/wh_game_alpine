@@ -517,7 +517,7 @@ def download_music_platform():
             search_query = song_title or user_input
         print(f"{C}[INFO] Suchquery: '{search_query}' | Ordner: '{artist_folder}'{W}")
 
-    target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
+    target_dir = f"{vault_dir}/Music_Schrein/Kuenstler/{artist_folder}"
 
     print(f"\n{Y}[LOG] Starte YouTube-Suche (20 Vektoren)...{W}")
     print(f"{C}[SUCHE] Query: '{search_query}'{W}")

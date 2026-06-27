@@ -5,5 +5,5 @@ sudo chmod +x /usr/local/bin/installupdate
 after that
 sudo installupdate
 after that
-installer --install
+sudo installer --install
 If you have Ideas, write them in the Ideas.md

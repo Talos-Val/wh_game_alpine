@@ -4,6 +4,7 @@ import sys
 import subprocess
 import json
 import re
+import platform
 from datetime import datetime
 
 CONFIG_FILE = os.path.expanduser("~/.mechanicus_cfg.json")
@@ -20,6 +21,69 @@ BROWN_GEAR_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
     'Accept': '*/*'
 }
+
+# ==========================================
+# SYSTEM-ERKENNUNG
+# ==========================================
+def detect_system():
+    """Erkennt das aktuelle Betriebssystem und die Linux-Distribution."""
+    system = platform.system().lower()
+    if system == "windows":
+        return "windows", None
+    elif system == "darwin":
+        return "macos", None
+    elif system == "linux":
+        distro = _detect_linux_distro()
+        return "linux", distro
+    return "unknown", None
+
+def _detect_linux_distro():
+    """Erkennt die Linux-Distribution."""
+    # Methode 1: /etc/os-release (moderner Standard)
+    if os.path.exists("/etc/os-release"):
+        try:
+            with open("/etc/os-release") as f:
+                content = f.read()
+            id_match = re.search(r'^ID="?([^"\n]+)"?', content, re.MULTILINE)
+            if id_match:
+                distro_id = id_match.group(1).lower()
+                # Distro-Familie bestimmen
+                if distro_id in ("ubuntu", "debian", "linuxmint", "pop", "kali", "raspbian", "elementary"):
+                    return "debian"
+                elif distro_id in ("fedora", "rhel", "centos", "rocky", "almalinux", "ol"):
+                    return "fedora"
+                elif distro_id in ("arch", "manjaro", "endeavouros", "garuda"):
+                    return "arch"
+                elif distro_id in ("opensuse", "sles", "sled"):
+                    return "suse"
+                elif distro_id in ("alpine",):
+                    return "alpine"
+                elif distro_id in ("void",):
+                    return "void"
+                else:
+                    return distro_id
+        except Exception:
+            pass
+    # Methode 2: Klassische Release-Dateien
+    for path, name in [("/etc/debian_version", "debian"), ("/etc/fedora-release", "fedora"),
+                       ("/etc/arch-release", "arch"), ("/etc/alpine-release", "alpine")]:
+        if os.path.exists(path):
+            return name
+    return "unknown"
+
+def get_package_manager_info(distro):
+    """Gibt Paketmanager-Infos für die jeweilige Distribution zurück."""
+    pm_map = {
+        "debian":  {"cmd": "apt",    "install": "sudo apt install -y",  "pkg_ffmpeg": "ffmpeg", "pkg_python": "python3-pip"},
+        "fedora":  {"cmd": "dnf",    "install": "sudo dnf install -y",  "pkg_ffmpeg": "ffmpeg", "pkg_python": "python3-pip"},
+        "arch":    {"cmd": "pacman", "install": "sudo pacman -S --noconfirm", "pkg_ffmpeg": "ffmpeg", "pkg_python": "python-pip"},
+        "suse":    {"cmd": "zypper", "install": "sudo zypper install -y", "pkg_ffmpeg": "ffmpeg", "pkg_python": "python3-pip"},
+        "alpine":  {"cmd": "apk",   "install": "sudo apk add",          "pkg_ffmpeg": "ffmpeg", "pkg_python": "py3-pip"},
+        "void":    {"cmd": "xbps",  "install": "sudo xbps-install -y",  "pkg_ffmpeg": "ffmpeg", "pkg_python": "python3-pip"},
+    }
+    return pm_map.get(distro, {"cmd": "apt", "install": "sudo apt install -y", "pkg_ffmpeg": "ffmpeg", "pkg_python": "python3-pip"})
+
+SYSTEM_OS, SYSTEM_DISTRO = detect_system()
 
 # ==========================================
 # KONFIGURATIONS-VERWALTUNG
@@ -48,7 +112,12 @@ def change_vault_setting():
     print(f"\n{B}{R}[RITUS V] MODIFIKATION DES ARCHIV-SCHREINS{W}")
     current = load_vault_dir()
     print(f"{C}Aktueller Pfad: {current}{W}")
-    print(f"{Y}Pfad-Zuweisung für Laufwerk D: /mnt/d/Omnissiah_Vault{W}")
+    if SYSTEM_OS == "linux":
+        print(f"{Y}Pfad-Zuweisung für externes Laufwerk z.B.: /mnt/data/Omnissiah_Vault{W}")
+    elif SYSTEM_OS == "windows":
+        print(f"{Y}Pfad-Zuweisung für Laufwerk D: D:\\Omnissiah_Vault{W}")
+    elif SYSTEM_OS == "macos":
+        print(f"{Y}Pfad-Zuweisung z.B.: /Volumes/External/Omnissiah_Vault{W}")
     
     new_path = input(f"{C}» Gib den neuen Ziel-Pfad ein (ENTER zum Abbrechen): {W}").strip()
     if not new_path:
@@ -56,7 +125,7 @@ def change_vault_setting():
     save_vault_dir(new_path)
 
 # ==========================================
-# DYNAMISCHER LADUNGS-RITUS
+# DYNAMISCHER LADUNGS-RITUS (OS-BEWUSST)
 # ==========================================
 def ensure_packages_and_import():
     required_packages = {"yt_dlp": "yt-dlp", "requests": "requests"}
@@ -70,24 +139,65 @@ def ensure_packages_and_import():
     if missing:
         print(f"{Y}[LITURGIE] Benötige zusätzliche Maschinengeist-Komponenten...{W}")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "--user", "--break-system-packages"] + missing)
+            if SYSTEM_OS == "linux":
+                # Auf Linux: --break-system-packages für moderne Distros (PEP 668)
+                try:
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "--user",
+                                           "--break-system-packages"] + missing)
+                except subprocess.CalledProcessError:
+                    # Fallback ohne --break-system-packages (ältere Distros)
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing)
+            elif SYSTEM_OS == "windows":
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing)
+            elif SYSTEM_OS == "macos":
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing)
+            else:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "--user"] + missing)
+                
             user_site = os.path.expanduser("~/.local/lib/python" + ".".join(sys.version.split(".")[:2]) + "/site-packages")
             if user_site not in sys.path:
                 sys.path.insert(0, user_site)
             print(f"{G}[STATUS] Komponenten erfolgreich gesalbt.{W}\n")
         except Exception as e:
-            print(f"{R}[KATASTROPHE] Autarke Installation fehlgeschlagen.{W}")
+            print(f"{R}[KATASTROPHE] Autarke Installation fehlgeschlagen: {e}{W}")
+            if SYSTEM_OS == "linux" and SYSTEM_DISTRO:
+                pm = get_package_manager_info(SYSTEM_DISTRO)
+                print(f"{Y}[HINWEIS] Versuche manuell: {pm['install']} {pm['pkg_python']}{W}")
             sys.exit(1)
 
     from yt_dlp import YoutubeDL
     import requests
     return YoutubeDL, requests
 
+def _find_executable(name):
+    """Findet eine ausführbare Datei plattformübergreifend."""
+    if SYSTEM_OS == "windows":
+        # Windows: where-Befehl
+        result = subprocess.call(["where", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        # Linux / macOS: which-Befehl
+        result = subprocess.call(["which", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return result == 0
+
 def check_ffmpeg():
-    if subprocess.call(["which", "ffmpeg"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+    if not _find_executable("ffmpeg"):
         print(f"{Y}[WARNUNG] 'ffmpeg' fehlt! Ohne ffmpeg ist keine MP3-Operation möglich!{W}")
+        if SYSTEM_OS == "linux" and SYSTEM_DISTRO:
+            pm = get_package_manager_info(SYSTEM_DISTRO)
+            print(f"{Y}[HINWEIS] Installiere mit: {pm['install']} {pm['pkg_ffmpeg']}{W}")
+        elif SYSTEM_OS == "macos":
+            print(f"{Y}[HINWEIS] Installiere mit: brew install ffmpeg{W}")
+        elif SYSTEM_OS == "windows":
+            print(f"{Y}[HINWEIS] Download: https://ffmpeg.org/download.html (zu PATH hinzufügen!){W}")
         return False
     return True
+
+def clear_screen():
+    """Bildschirm plattformübergreifend löschen."""
+    if SYSTEM_OS == "windows":
+        os.system("cls")
+    else:
+        os.system("clear")
 
 # ==========================================
 # AKTIONEN (RITUS I & II)
@@ -166,48 +276,205 @@ def download_twitch():
         print(f"{R}[KATASTROPHE] Ausfall: {e}{W}")
 
 # ==========================================
-# RITUS III: MUSIC PLATFORM HARVESTER MAX (v14.0)
+# SPOTIFY METADATEN-EXTRAKTOR (v15.0 - Mehrstufig)
+# ==========================================
+def extract_spotify_metadata(user_input, requests):
+    """
+    Extrahiert Künstler und Titel aus einem Spotify-Link.
+    Verwendet mehrere Methoden als Fallback-Kette.
+    Gibt (artist_name, song_title) zurück oder (None, None) bei Fehler.
+    """
+    artist_name = None
+    song_title = None
+
+    # -- Methode 1: Spotify oEmbed API --
+    # Normalisiere den Link (entferne intl-XX Präfix, das die API manchmal stört)
+    clean_url = re.sub(r'open\.spotify\.com/intl-[a-z]+/', 'open.spotify.com/', user_input)
+    # Extrahiere nur Track-ID falls vorhanden
+    track_id_match = re.search(r'/track/([A-Za-z0-9]+)', user_input)
+    if track_id_match:
+        track_id = track_id_match.group(1)
+        canonical_url = f"https://open.spotify.com/track/{track_id}"
+    else:
+        canonical_url = clean_url
+
+    try:
+        oembed_url = f"https://open.spotify.com/oembed?url={canonical_url}"
+        resp = requests.get(oembed_url, headers=BROWN_GEAR_HEADERS, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_title = data.get("title", "")
+            
+            # oEmbed title ist oft "Songname" (ohne Künstler)
+            # Aber manchmal "Songname · Künstler" oder "Songname - Künstler"
+            if " · " in raw_title:
+                parts = raw_title.split(" · ", 1)
+                song_title = parts[0].strip()
+                artist_name = parts[1].strip()
+            elif " - " in raw_title:
+                parts = raw_title.split(" - ", 1)
+                song_title = parts[0].strip()
+                artist_name = parts[1].strip()
+            else:
+                song_title = raw_title.strip()
+                # Künstler noch nicht bekannt, weiter zu Methode 2
+            
+            # Versuche Künstler aus dem HTML-Feld des oEmbed zu extrahieren
+            if not artist_name:
+                html_block = data.get("html", "")
+                # Spotify bettet den Künstler manchmal in das iframe-HTML ein
+                artist_match = re.search(r'(?:by|artist)["\s:]+([^"<&\n]+)', html_block, re.IGNORECASE)
+                if artist_match:
+                    artist_name = artist_match.group(1).strip()
+    except Exception as e:
+        print(f"{Y}[LOG] oEmbed-Methode nicht verfügbar: {e}{W}")
+
+    # -- Methode 2: Spotify Open Graph / HTML Scraping --
+    if not artist_name and track_id_match:
+        try:
+            track_id = track_id_match.group(1)
+            # Verwende den kanonischen Link ohne intl-Präfix
+            page_url = f"https://open.spotify.com/track/{track_id}"
+            # Verwende Accept-Language Deutsch, um konsistente Ergebnisse zu bekommen
+            headers = {**BROWN_GEAR_HEADERS, 'Accept-Language': 'de-DE,de;q=0.9'}
+            page_resp = requests.get(page_url, headers=headers, timeout=15)
+            html = page_resp.text
+
+            # Priorität 1: JSON-LD Strukturdaten (zuverlässigste Methode)
+            jsonld_match = re.search(r'<script type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
+            if jsonld_match:
+                try:
+                    ld_data = json.loads(jsonld_match.group(1))
+                    if isinstance(ld_data, dict):
+                        # MusicRecording Schema
+                        if ld_data.get("@type") == "MusicRecording":
+                            song_title = song_title or ld_data.get("name", "")
+                            by_artist = ld_data.get("byArtist", {})
+                            if isinstance(by_artist, list) and by_artist:
+                                artist_name = by_artist[0].get("name", "")
+                            elif isinstance(by_artist, dict):
+                                artist_name = by_artist.get("name", "")
+                except json.JSONDecodeError:
+                    pass
+
+            # Priorität 2: Next.js / React Hydration Data (Spotify nutzt Next.js)
+            if not artist_name:
+                # Neues Format: "__NEXT_DATA__" Script-Tag
+                next_data_match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+                if next_data_match:
+                    try:
+                        nd = json.loads(next_data_match.group(1))
+                        # Navigiere durch die verschachtelte Struktur
+                        entity = (nd.get("props", {})
+                                    .get("pageProps", {})
+                                    .get("state", {})
+                                    .get("data", {})
+                                    .get("entity", {}))
+                        if not entity:
+                            # Alternativer Pfad
+                            entity = (nd.get("props", {})
+                                        .get("pageProps", {})
+                                        .get("data", {}))
+                        if entity:
+                            song_title = song_title or entity.get("name", "") or entity.get("title", "")
+                            artists = entity.get("artists", {})
+                            if isinstance(artists, dict):
+                                items = artists.get("items", [])
+                                if items:
+                                    artist_name = items[0].get("profile", {}).get("name", "")
+                            elif isinstance(artists, list) and artists:
+                                artist_name = artists[0].get("name", "")
+                    except (json.JSONDecodeError, AttributeError):
+                        pass
+
+            # Priorität 3: Open Graph Meta-Tags
+            if not artist_name:
+                og_title = re.search(r'<meta property="og:title" content="([^"]+)"', html)
+                og_desc = re.search(r'<meta property="og:description" content="([^"]+)"', html)
+                if og_title and not song_title:
+                    song_title = og_title.group(1).strip()
+                if og_desc:
+                    # Description ist oft: "Lied · Künstler · Album · Jahr"
+                    desc = og_desc.group(1)
+                    parts = desc.split(" · ")
+                    if len(parts) >= 2:
+                        if not song_title:
+                            song_title = parts[0].strip()
+                        artist_name = parts[1].strip()
+
+            # Priorität 4: Twitter Card Meta-Tags
+            if not artist_name:
+                tw_artist = re.search(r'<meta name="twitter:audio:artist_name" content="([^"]+)"', html)
+                tw_title  = re.search(r'<meta name="twitter:title" content="([^"]+)"', html)
+                if tw_artist:
+                    artist_name = tw_artist.group(1).strip()
+                if tw_title and not song_title:
+                    song_title = tw_title.group(1).strip()
+
+        except Exception as e:
+            print(f"{Y}[LOG] HTML-Scraping-Methode fehlgeschlagen: {e}{W}")
+
+    # -- Methode 3: MusicBrainz (öffentliche API, kein API-Key nötig) --
+    if not artist_name and track_id_match and song_title:
+        try:
+            # Suche über Song-Titel bei MusicBrainz
+            mb_url = f"https://musicbrainz.org/ws/2/recording/?query=recording:{requests.utils.quote(song_title)}&fmt=json&limit=1"
+            mb_resp = requests.get(mb_url, headers={'User-Agent': 'MechanicusExtractor/15.0 (contact@example.com)'}, timeout=10)
+            if mb_resp.status_code == 200:
+                mb_data = mb_resp.json()
+                recordings = mb_data.get("recordings", [])
+                if recordings:
+                    credits = recordings[0].get("artist-credit", [])
+                    if credits:
+                        artist_name = credits[0].get("artist", {}).get("name", "")
+        except Exception:
+            pass
+
+    return artist_name, song_title
+
+# ==========================================
+# RITUS III: MUSIC PLATFORM HARVESTER MAX (v15.0)
 # ==========================================
 def download_music_platform():
     YoutubeDL, requests = ensure_packages_and_import()
     ffmpeg_available = check_ffmpeg()
     vault_dir = load_vault_dir()
     
-    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (BOOSTED SEARCH v14.0){W}")
+    print(f"\n{B}{R}[RITUS III] MUSIC PLATFORM HARVESTER (MULTI-VEKTOR v15.0){W}")
     user_input = input(f"{C}» Gib Interpret+Songname ODER Spotify-Link ein:\n» {W}").strip()
     if not user_input: return
 
     search_query = user_input
     artist_folder = "Unbekannter_Saenger"
 
-    # Hochpräzise Spotify-Parsing-Matrix
+    # Hochpräzise Spotify-Parsing-Matrix (v15.0)
     if "spotify.com" in user_input or "spotify.link" in user_input:
-        print(f"\n{Y}[LOG] Spotify-Protokoll erkannt. Extrahiere Metadaten-Kerne...{W}")
-        try:
-            sp_url = f"https://open.spotify.com/oembed?url={user_input}"
-            response = requests.get(sp_url, headers=BROWN_GEAR_HEADERS, timeout=10)
-            
-            html_response = requests.get(user_input, headers=BROWN_GEAR_HEADERS, timeout=10)
-            artist_match = re.search(r'"artists":\[{"name":"([^"]+)"', html_response.text)
-            if not artist_match:
-                artist_match = re.search(r'<meta property="twitter:audio:artist_name" content="([^"]+)"', html_response.text)
-            
-            artist_name = artist_match.group(1) if artist_match else "Unbekannter_Saenger"
-            
-            if response.status_code == 200:
-                data = response.json()
-                song_title = data.get("title", "")
-                artist_folder = get_safe_filename(artist_name)
-                search_query = f"{artist_name} - {song_title}"
-                
-                print(f"{G}[STATUS] Spotify-Matrix erfolgreich entschlüsselt!{W}")
-                print(f"{C}Künstler: {artist_name} | Track: {song_title}{W}")
+        print(f"\n{Y}[LOG] Spotify-Protokoll erkannt. Starte Multi-Vektor-Extraktion...{W}")
+        
+        artist_name, song_title = extract_spotify_metadata(user_input, requests)
+        
+        if artist_name and song_title:
+            artist_folder = get_safe_filename(artist_name)
+            search_query = f"{artist_name} - {song_title}"
+            print(f"{G}[STATUS] Spotify-Matrix erfolgreich entschlüsselt!{W}")
+            print(f"{C}Künstler: {artist_name} | Track: {song_title}{W}")
+        elif song_title:
+            search_query = song_title
+            print(f"{Y}[WARNUNG] Nur Titel erkannt ('{song_title}'). Bitte Künstler manuell bestätigen:{W}")
+            artist_input = input(f"{Y}» Künstler/Interpret für den Ordnernamen: {W}").strip()
+            if artist_input:
+                artist_folder = get_safe_filename(artist_input)
+                search_query = f"{artist_input} - {song_title}"
             else:
-                print(f"{Y}[WARNUNG] oEmbed-Schnittstelle blockiert. Nutze Direkttext.{W}")
-        except Exception as e:
-            print(f"{Y}[WARNUNG] Fehler beim Auslesen ({e}). Verarbeite als Roh-Suchbegriff.{W}")
-
-    if "spotify.com" not in user_input and "spotify.link" not in user_input:
+                artist_folder = "Unbekannter_Saenger"
+        else:
+            print(f"{R}[WARNUNG] Metadaten konnten nicht extrahiert werden. Verarbeite als Roheingabe.{W}")
+            artist_input = input(f"{Y}» Künstler für die Suche eingeben: {W}").strip()
+            if artist_input:
+                artist_folder = get_safe_filename(artist_input)
+                search_query = artist_input
+    else:
+        # Kein Spotify-Link
         if " - " in user_input:
             artist_folder = get_safe_filename(user_input.split(" - ", 1)[0])
         else:
@@ -217,9 +484,10 @@ def download_music_platform():
 
     target_dir = f"{vault_dir}/Music_Schrein/{artist_folder}"
     
-    # SYSTEM-UPGRADE: Wir hängen präzise Filter-Keywords an, um offizielle Releases nach oben zu zwingen
+    # SYSTEM-UPGRADE: Präzise Filter-Keywords für bessere Ergebnisse
     boosted_search = f"{search_query} Official Audio OR Lyric Video OR Topic"
     print(f"\n{Y}[LOG] Aktiviere Such-Verstärker. Scanne tiefenwirksam (20 Vektoren)...{W}")
+    print(f"{C}[SUCHE] Query: {search_query}{W}")
     
     search_opts = {
         'extract_flat': True,
@@ -427,14 +695,14 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v14.0 ::.
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v15.0 ::.
 """)
-    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Boosted Indie-Search Online. ]")
-    print(f"   [ Aktueller Schrein: {current_vault} ]{W}\n")
+    print(f"{C}   [ Ein Lobpreis dem Omnissiah. Multi-OS Neural Core Online. ]")
+    print(f"   [ System: {SYSTEM_OS.upper()}{' / ' + SYSTEM_DISTRO.upper() if SYSTEM_DISTRO else ''} | Aktueller Schrein: {current_vault} ]{W}\n")
 
 def main():
     while True:
-        os.system('clear' if os.name == 'posix' else 'cls')
+        clear_screen()
         banner()
         print(f"[{R}01{W}] YouTube-Video akquirieren (Direkt-Link/Suche -> MP4)")
         print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen")

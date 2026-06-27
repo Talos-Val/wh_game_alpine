@@ -2,10 +2,53 @@
 import os
 import sys
 import subprocess
+import json
 from datetime import datetime
 
+CONFIG_FILE = os.path.expanduser("~/.mechanicus_cfg.json")
+
 # ==========================================
-# SEGNETER INSTALLATIONS-RITUS (Fix für Ubuntu/WSL & PEP 668)
+# KONFIGURATIONS-VERWALTUNG
+# ==========================================
+def load_vault_dir():
+    # Standardpfad falls keine Config existiert
+    default_dir = os.path.join(os.getcwd(), "Omnissiah_Data_Vault")
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                return cfg.get("vault_dir", default_dir)
+        except:
+            return default_dir
+    return default_dir
+
+def save_vault_dir(new_dir):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"vault_dir": new_dir}, f, indent=4)
+        print(f"\033[32m✓ [SYSTEM] Pfad permanent im Datenskript versiegelt: {new_dir}\033[0m")
+    except Exception as e:
+        print(f"\033[31m[FEHLER] Konfiguration konnte nicht geschrieben werden: {e}\033[0m")
+
+def change_vault_setting():
+    print(f"\n\033[1m\033[31m[RITUS IV] MODIFIKATION DES ARCHIV-SCHREINS\033[0m")
+    current = load_vault_dir()
+    print(f"\033[36mAktueller Pfad: {current}\033[0m")
+    print("\033[33mTipp: Absolute Pfade nutzen, z.B. /mnt/c/Users/PC/Downloads/MeinVault oder /home/titus/vault\033[0m")
+    
+    new_path = input("\033[36m» Gib den neuen Ziel-Pfad ein (ENTER zum Abbrechen): \033[0m").strip()
+    if not new_path:
+        return
+        
+    # Versuche den Ordner direkt zu erstellen um Validität zu prüfen
+    try:
+        os.makedirs(new_path, exist_ok=True)
+        save_vault_dir(new_path)
+    except Exception as e:
+        print(f"\033[31m[FEHLER] Pfad ungültig oder keine Rechte: {e}\033[0m")
+
+# ==========================================
+# SEGNETER INSTALLATIONS-RITUS
 # ==========================================
 def install_dependencies():
     required_packages = {
@@ -53,8 +96,6 @@ C = "\033[36m"    # Plasma-Cyan
 B = "\033[1m"     # Aktivierter Binärcode
 W = "\033[0m"     # Reset
 
-VAULT_DIR = "Omnissiah_Data_Vault"
-
 BROWN_GEAR_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -65,6 +106,7 @@ BROWN_GEAR_HEADERS = {
 
 def banner():
     os.system('clear' if os.name == 'posix' else 'cls')
+    current_vault = load_vault_dir()
     print(r"""
 █████╗ ██████╗ ███████╗██████╗ ████████╗██╗   ██╗███████╗
 ██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
@@ -72,14 +114,16 @@ def banner():
 ██╔══██║██║  ██║██╔══╝  ██╔═══╝    ██║   ██║   ██║╚════██║
 ██║  ██║██████╔╝███████╗██║        ██║   ╚██████╔╝███████║
 ╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝        ╚═╝    ╚═════╝ ╚══════╝
-      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v5.5 ::.
-""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Maschinensicht getarnt. ]\n"
+      .:: ADAPTUS MECHANICUS DATA EXCAVATOR v6.0 ::.
+""" + f"{W}{C}   [ Ein Lobpreis dem Omnissiah. Totale Netz-Tarnung aktiv. ]\n"
+      f"   [ Aktueller Schrein: {current_vault} ]\n"
       f"   [ Chrono-Logik: {datetime.now().strftime('%Y-%m-%d')} ]{W}\n")
 
 def get_safe_filename(text):
     return "".join([c for c in text if c.isalnum() or c in " _-"]).strip()
 
 def download_youtube():
+    vault_dir = load_vault_dir()
     print(f"\n{B}{R}[RITUS I] COGNITION DES YOUTUBE-CHRONIKEN{W}")
     url = input(f"{C}» Reiche die heilige YouTube-Daten-URL ein: {W}").strip()
     if not url: return
@@ -101,7 +145,7 @@ def download_youtube():
         print(f"{R}[STÖRUNG] Maschinengeist verweigert die Metadaten-Analyse: {e}{W}")
         return
 
-    target_dir = f"{VAULT_DIR}/YouTube_Archive/{creator}"
+    target_dir = f"{vault_dir}/YouTube_Archive/{creator}"
     os.makedirs(target_dir, exist_ok=True)
     
     print(f"{G}[LOG] Daten-Schrein lokalisiert: {target_dir}/{W}")
@@ -124,6 +168,7 @@ def download_youtube():
         print(f"{R}[ABBRUCH] Daten-Fragmentierung während des Saugens: {e}{W}")
 
 def download_twitch():
+    vault_dir = load_vault_dir()
     print(f"\n{B}{R}[RITUS II] TRANSMISSION DES TWITCH-LIVE-STREAMS{W}")
     url = input(f"{C}» Gib die Frequenz des Senders ein (Kanal-URL): {W}").strip()
     if not url: return
@@ -146,7 +191,7 @@ def download_twitch():
         return
 
     today = datetime.now().strftime('%Y-%m-%d')
-    target_dir = f"{VAULT_DIR}/Twitch_Streams/{streamer}/{today}"
+    target_dir = f"{vault_dir}/Twitch_Streams/{streamer}/{today}"
     os.makedirs(target_dir, exist_ok=True)
 
     print(f"{G}[LOG] Matrix initialisiert unter: {target_dir}/{W}")
@@ -171,6 +216,7 @@ def download_twitch():
         print(f"{R}[KATASTROPHE] Ausfall des Aufzeichnungs-Schaltkreises: {e}{W}")
 
 def reddit_deep_scraper():
+    vault_dir = load_vault_dir()
     print(f"\n{B}{R}[RITUS III] EXZERPTION DES SUBREDDIT-DENKARCHIVS{W}")
     subreddit = input(f"{C}» Welches Subreddit soll exhumiert werden? {W}").strip()
     if not subreddit: return
@@ -178,7 +224,7 @@ def reddit_deep_scraper():
     safe_sub = get_safe_filename(subreddit)
     today = datetime.now().strftime('%Y-%m-%d')
     
-    sub_dir = f"{VAULT_DIR}/Reddit_Archives/{safe_sub}"
+    sub_dir = f"{vault_dir}/Reddit_Archives/{safe_sub}"
     target_dir = f"{sub_dir}/{today}"
     os.makedirs(target_dir, exist_ok=True)
 
@@ -258,7 +304,8 @@ def main():
         print(f"[{R}01{W}] YouTube-Video akquirieren (Kanal-Sortierung | Getarnt)")
         print(f"[{R}02{W}] Twitch Live-Datenstrom abfangen (Streamer -> Datum -> Kapsel)")
         print(f"[{R}03{W}] Reddit-Subreddit leersaugen (15 neueste Daten-Kapseln)")
-        print(f"[{R}04{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")
+        print(f"[{R}04{W}] Speicherort des Archiv-Schreins (Vault) modifizieren")
+        print(f"[{R}05{W}] Maschinengeist in die Stasis-Kammer versetzen (Beenden)")
         
         choice = input(f"\n{B}{R}Gib heiligen Binärbefehl ein » {W}").strip()
         
@@ -266,9 +313,11 @@ def main():
             download_youtube()
         elif choice in ["2", "02"]:
             download_twitch()
-        elif choice == "3" or choice == "03":
+        elif choice in ["3", "03"]:
             reddit_deep_scraper()
         elif choice in ["4", "04"]:
+            change_vault_setting()
+        elif choice in ["5", "05"]:
             print(f"\n{Y}[STASIS] Fahre Logik-Kogitatoren herunter. Der Omnissiah beschützt.{W}\n")
             sys.exit()
         else:

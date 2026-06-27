@@ -541,7 +541,7 @@ def download_music_platform():
             return
 
         # ==========================================
-        # INTERAKTIVES BLÄTTER-SYSTEM (20 TRÄCKS MAX)
+        # INTERAKTIVES BLÄTTER-SYSTEM (20 TRACKS MAX)
         # ==========================================
         current_index = 0
         page_size = 5
@@ -637,7 +637,7 @@ def synthesize_playlist():
     if not check_ffmpeg(): return
     vault_dir = load_vault_dir()
     music_dir = f"{vault_dir}/Music_Schrein"
-    playlist_dir = f"{vault_dir}/Playlists"
+    playlist_dir = f"{vault_dir}/Music_Schrein/Playlists"
 
     print(f"\n{B}{R}[RITUS IV] PLAYLIST-SCHMIEDE (INTERAKTIVE AUSWAHL){W}")
 
